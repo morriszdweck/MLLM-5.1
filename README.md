@@ -1,2 +1,3 @@
 # DiffusionMLLM-5.1
-test diffusion micro launguage models
+BETA
+diffusion version of MLLM with new architecture... may not work well.
