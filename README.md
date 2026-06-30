@@ -13,3 +13,8 @@ models planned:
 - MLLM-5.1 Mesa 10P
 
 Studio will come sometime.
+
+Current models:
+MLLM-5.1 Preview-36P (preview of the model)
+
+The diffusiona rchtiecture allows the model to look forward and backwards for predictions and fix errors
