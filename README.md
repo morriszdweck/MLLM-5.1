@@ -18,3 +18,4 @@ Current models:
 MLLM-5.1 Preview-36P (preview of the model)
 
 The diffusiona rchtiecture allows the model to look forward and backwards for predictions and fix errors
+to do: review code, optimize and add tools
