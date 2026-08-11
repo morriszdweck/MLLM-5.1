@@ -16,7 +16,19 @@ Requires Python 3.10+.
 ```bash
 git clone https://github.com/morriszdweck/MLLM-5.1.git
 cd MLLM-5.1
+
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
+```
+
+On macOS with Homebrew Python (and other PEP 668 systems), plain
+`pip install` is blocked with an `externally-managed-environment` error —
+the virtual environment above is the fix. Alternatively, install the CLI
+isolated with [pipx](https://pipx.pypa.io/):
+
+```bash
+pipx install git+https://github.com/morriszdweck/MLLM-5.1.git
 ```
 
 (Everything also works without installing: run `python -m mllm51` from the
