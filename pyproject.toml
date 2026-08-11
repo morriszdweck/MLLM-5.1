@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mllm51"
+version = "5.1.0"
+description = "Diff-MLLM-5.1: a discrete diffusion language model with bidirectional n-gram scoring"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "morriszdweck" }]
+keywords = ["diffusion", "language-model", "n-gram", "toy-model"]
+
+[project.urls]
+Repository = "https://github.com/morriszdweck/MLLM-5.1"
+
+[project.scripts]
+mllm51 = "mllm51.cli:main"
+
+[tool.setuptools]
+packages = ["mllm51"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
