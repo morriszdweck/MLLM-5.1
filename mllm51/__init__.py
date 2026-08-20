@@ -3,7 +3,7 @@
 from .engine import MASK, DenoiseResult, DiscreteDiffusionEngine
 from .topology import BidirectionalTopology, tokenize
 
-__version__ = "5.1.1"
+__version__ = "5.1"
 
 __all__ = [
     "MASK",

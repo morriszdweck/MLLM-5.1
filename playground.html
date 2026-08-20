@@ -1,64 +1,597 @@
-#!/usr/bin/env python3
-"""
-MLLM-5.1 — Document Autocomplete Micro Language Model
-Single-file, zero-dependency, pure Python 3.10+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>MLLM-5.1 — Document Editor Autocomplete Playground</title>
+<style>
+/* ── TOKENS ─────────────────────────────────────────── */
+:root{
+  --bg:#050810;
+  --bg2:#0a0f1e;
+  --bg3:#0f1730;
+  --surface:rgba(16,24,52,.88);
+  --surface2:rgba(20,32,70,.58);
+  --surface3:rgba(24,38,82,.72);
+  --border:rgba(100,140,255,.18);
+  --border2:rgba(80,140,255,.34);
+  --border3:rgba(80,140,255,.5);
+  --accent:#4d9fff;
+  --accent2:#00e5ff;
+  --accent3:#7b6cf0;
+  --ghost:#9aa0b6;
+  --text:#e8eeff;
+  --text2:#9aa3c8;
+  --text3:#5a6588;
+  --text4:#3e4a6b;
+  --success:#00d084;
+  --warn:#ffb020;
+  --danger:#ff4d6a;
+  --radius:14px;
+  --radius-sm:9px;
+  --radius-xs:6px;
+  --font-mono:'IBM Plex Mono','JetBrains Mono','SF Mono','Cascadia Code',ui-monospace,monospace;
+  --font-sans:'Sora','Inter',system-ui,-apple-system,sans-serif;
+  --editor-font: 15.5px;
+  --shadow:0 10px 40px rgba(0,0,0,.55), 0 2px 10px rgba(0,0,0,.4);
+  --glow:0 0 22px rgba(77,159,255,.25);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{height:100%;scrollbar-color:var(--border2) transparent}
+body{
+  min-height:100dvh;
+  background:
+    radial-gradient(900px 600px at 20% -10%, rgba(77,159,255,.18), transparent 60%),
+    radial-gradient(700px 500px at 90% 0%, rgba(0,229,255,.10), transparent 60%),
+    radial-gradient(600px 600px at 80% 90%, rgba(123,108,240,.10), transparent 60%),
+    linear-gradient(180deg, var(--bg) 0%, #060a18 100%);
+  color:var(--text);
+  font-family:var(--font-sans);
+  line-height:1.5;
+  overflow-x:hidden;
+}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+::selection{background:rgba(77,159,255,.35)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:999px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
 
-A tiny autocomplete LM that continues your document.
-Core idea: build a causal n-gram topology from a corpus, then complete
-prefixes left-to-right. Each position is scored only on left context
-(distances 1..3), sampled under temperature, gated by confidence — like
-ghost-text in an editor. Tab to accept.
+/* ── BANNER ─────────────────────────────────────────── */
+.banner{
+  border-bottom:1px solid var(--border);
+  background: linear-gradient(180deg, rgba(16,24,52,.92), rgba(10,15,30,.98));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  position:sticky; top:0; z-index:30;
+}
+.banner-inner{
+  max-width:1280px; margin:0 auto;
+  padding:14px 20px 12px;
+  display:flex; gap:18px; align-items:center; flex-wrap:wrap;
+}
+.banner-ascii{
+  font-family:var(--font-mono);
+  font-size:7.5px; line-height:1; letter-spacing:.02em;
+  color:var(--accent);
+  text-shadow:0 0 14px rgba(77,159,255,.6);
+  white-space:pre; display:block;
+  opacity:.95;
+}
+.banner-ascii span{color:var(--accent2)}
+.banner-title{
+  flex:1; min-width:220px;
+}
+.banner-title h1{
+  font-family:var(--font-mono);
+  font-size:13px; letter-spacing:.14em; font-weight:700;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  display:flex; align-items:center; gap:10px;
+}
+.banner-title h1 i{
+  font-style:normal;
+  font-size:9px; padding:3px 7px; border-radius:999px;
+  border:1px solid var(--border2); background:var(--surface2);
+  -webkit-text-fill-color:var(--text2); letter-spacing:.1em;
+}
+.banner-title p{
+  font-family:var(--font-mono);
+  font-size:11px; color:var(--text3); margin-top:4px; letter-spacing:.02em;
+}
+.banner-title p b{color:var(--text2); font-weight:500}
+.banner-meta{
+  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  font-family:var(--font-mono); font-size:11px; color:var(--text3);
+}
+.meta-pill{
+  padding:6px 10px; border-radius:999px;
+  border:1px solid var(--border); background:var(--surface2);
+  display:flex; gap:6px; align-items:center;
+}
+.meta-pill b{color:var(--accent);font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success)}
+.dot.loading{background:var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-Usage
------
-  python MLLM-5.1.py "the quick brown"                # one-shot autocomplete (default)
-  python MLLM-5.1.py autocomplete "hello world" --steps 16 --seed 42
-  python MLLM-5.1.py generate "what is an atom" --steps 30 --seed 42  # alias
-  python MLLM-5.1.py                                   # interactive autocomplete REPL
-  python MLLM-5.1.py chat --steps 24                   # alias for REPL
+/* ── APP SHELL ──────────────────────────────────────── */
+.app{
+  max-width:1280px; margin:0 auto; padding:18px 20px 28px;
+  display:grid; grid-template-columns: 1.65fr .85fr; gap:16px;
+  align-items:start;
+}
+@media(mash-width:1100px){}
+@media(max-width:980px){
+  .app{grid-template-columns:1fr; gap:14px}
+  .banner-ascii{font-size:6px}
+}
+@media(max-width:620px){
+  .banner-inner{padding:12px 14px}
+  .app{padding:12px 12px 20px}
+}
 
-Principles (autocomplete-focused)
-----------------------------------
-  • causal n-gram topology (left context only, n=1..3)
-  • left-to-right generation: prefix frozen, continuation sampled step-by-step
-  • temperature + threshold gating (ghost only if confident)
-  • diffusion heritage: annealed steps still available via --steps/effort
-  • pure stdlib, deterministic with --seed, works offline
+/* ── CARDS ──────────────────────────────────────────── */
+.card{
+  background: var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  overflow:hidden;
+}
+.card-head{
+  padding:12px 16px 10px;
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  background: linear-gradient(180deg, rgba(255,255,255,.03), transparent);
+}
+.card-head h2{
+  font-family:var(--font-mono);
+  font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--text2); font-weight:600;
+  display:flex; align-items:center; gap:8px;
+}
+.card-head h2 i{font-style:normal; color:var(--accent)}
+.card-head-actions{display:flex; gap:8px; align-items:center}
+.icon-btn{
+  width:28px;height:28px; border-radius:8px;
+  border:1px solid var(--border); background:var(--surface2);
+  color:var(--text2); display:grid; place-items:center;
+  font-size:13px; transition:.15s;
+}
+.icon-btn:hover{border-color:var(--border3); color:var(--text); background:var(--surface3); transform:translateY(-1px)}
+.icon-btn:active{transform:none}
 
-No install needed. Just Python 3.10+. Optionally install for `mllm51` CLI
-via `pip install -e .` (package re-exports this file).
-"""
+/* ── EDITOR ─────────────────────────────────────────── */
+.editor-card{ display:flex; flex-direction:column; min-height:520px}
+.editor-toolbar{
+  padding:8px 14px;
+  border-bottom:1px solid var(--border);
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  font-family:var(--font-mono); font-size:11px; color:var(--text3);
+  background: var(--surface2);
+}
+.editor-toolbar kbd{
+  font-family:var(--font-mono);
+  font-size:10px; letter-spacing:.04em;
+  padding:2px 6px; border-radius:5px;
+  background: var(--bg3); border:1px solid var(--border2); border-bottom-width:2px;
+  color:var(--accent); font-weight:600;
+}
+.editor-toolbar .grow{flex:1}
+.conf-badge{
+  padding:4px 8px; border-radius:999px;
+  border:1px solid var(--border); background:rgba(0,0,0,.2);
+  font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+}
+.conf-badge b{color:var(--success)}
+.conf-badge.mid b{color:var(--warn)}
+.conf-badge.low b{color:var(--danger)}
 
-from __future__ import annotations
+.editor-wrap{
+  position:relative; flex:1; display:flex; flex-direction:column;
+  background: linear-gradient(180deg, var(--bg2), #0a1024);
+  min-height:380px;
+}
+.ghost-layer, .editor{
+  font-family:var(--font-mono);
+  font-size:var(--editor-font);
+  line-height:1.78;
+  letter-spacing:.01em;
+  padding:18px 18px 18px 20px;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+  word-break:break-word;
+  tab-size:2;
+  overflow-wrap:anywhere;
+}
+.ghost-layer{
+  position:absolute; inset:0;
+  color:transparent;
+  overflow:auto;
+  pointer-events:none;
+  z-index:1;
+  border:1px solid transparent;
+}
+.ghost-layer .ghost-typed{color:transparent}
+.ghost-layer .ghost{
+  color:var(--ghost);
+  font-style:italic;
+  opacity:.95;
+}
+.editor{
+  position:relative; z-index:2;
+  flex:1;
+  width:100%; min-height:380px;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:0;
+  color:var(--text);
+  caret-color:var(--accent);
+  resize:none;
+  outline:none;
+  overflow:auto;
+}
+.editor::placeholder{color:var(--text4); font-style:italic}
+.editor:focus{outline:none}
+.editor-wrap:focus-within{box-shadow: inset 0 0 0 1px var(--border2), var(--glow)}
 
-import argparse
-import logging
-import math
-import os
-import random
-import re
-import sys
-import textwrap
-import time
-from collections import Counter, defaultdict
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Callable, Sequence
+.editor-footer{
+  padding:10px 14px;
+  border-top:1px solid var(--border);
+  display:flex; gap:14px; align-items:center; flex-wrap:wrap;
+  font-family:var(--font-mono); font-size:11px; color:var(--text3);
+  background:var(--surface);
+}
+.editor-footer strong{color:var(--text2); font-weight:600}
+.heatmap{
+  flex:1; display:flex; gap:3px; align-items:center; min-width:120px; min-height:14px;
+}
+.heatmap i{
+  flex:1; height:8px; border-radius:999px; border:1px solid rgba(255,255,255,.06);
+  background:var(--border); display:block; max-width:48px;
+}
+.heatmap-label{font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--text4)}
 
-__version__ = "5.1"
-MASK = "<mask>"
+/* ghost cursor blink for empty ghost */
+.ghost-layer .cursor{
+  display:inline-block; width:2px; height:1.1em; background:var(--accent);
+  vertical-align:text-bottom; margin-left:1px; animation:blink 1s step-end infinite;
+}
+@keyframes blink{50%{opacity:0}}
 
-# ───────────────────────────────────────────────────────────── tokenization
-TOKEN_RE = re.compile(r"\b[a-zA-Z0-9']+\b|[.!?]")
-SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
-WHITESPACE_RE = re.compile(r"\s+")
+/* ── SIDE ───────────────────────────────────────────── */
+.side{display:flex; flex-direction:column; gap:16px; position:sticky; top:74px}
+@media(max-width:980px){.side{position:static}}
+.controls-grid{
+  display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px 14px 16px;
+}
+.control{
+  display:flex; flex-direction:column; gap:7px;
+}
+.control.full{grid-column:1 / -1}
+.control label{
+  font-family:var(--font-mono);
+  font-size:10px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--text3); display:flex; justify-content:space-between; align-items:center; gap:8px;
+}
+.control label b{
+  font-size:11px; color:var(--accent); background:var(--bg3);
+  border:1px solid var(--border); padding:1px 7px; border-radius:999px; letter-spacing:.06em;
+  font-weight:700; min-width:42px; text-align:center;
+}
+.control input[type=range]{
+  width:100%; height:18px; -webkit-appearance:none; appearance:none; background:transparent;
+}
+.control input[type=range]::-webkit-slider-runnable-track{
+  height:6px; background:var(--bg3); border:1px solid var(--border); border-radius:999px;
+}
+.control input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:16px;height:16px; border-radius:50%;
+  background: linear-gradient(180deg, var(--accent), #2e6bff);
+  border:2px solid white; box-shadow:0 2px 8px rgba(0,0,0,.4);
+  margin-top:-6px; cursor:pointer;
+}
+.control input[type=number], .control input[type=text], .control select{
+  width:100%; padding:7px 10px; border-radius:8px;
+  border:1px solid var(--border); background:var(--bg3); color:var(--text);
+  font-family:var(--font-mono); font-size:13px; outline:none;
+}
+.control input:focus, .control select:focus{border-color:var(--border3); box-shadow:0 0 0 3px rgba(77,159,255,.18)}
+.hint{
+  font-size:11px; color:var(--text3); line-height:1.5; font-family:var(--font-mono);
+}
+.btn{
+  padding:9px 14px; border-radius:9px; border:1px solid var(--border2);
+  background: linear-gradient(180deg, var(--surface3), var(--surface2));
+  color:var(--text); font-family:var(--font-mono); font-size:12px; font-weight:600;
+  letter-spacing:.04em; transition:.15s; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent); transform:translateY(-1px); box-shadow:var(--glow)}
+.btn:active{transform:none}
+.btn-primary{
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color:#051022; border-color:transparent; font-weight:700;
+}
+.btn-primary:hover{color:#051022; filter:brightness(1.05)}
+.btn-ghost{background:transparent}
+.btn-small{padding:6px 10px; font-size:11px}
+.btn-row{display:flex; gap:8px; flex-wrap:wrap}
 
-def tokenize(text: str) -> list[str]:
-    """Split *text* into lowercase word and punctuation tokens."""
-    return TOKEN_RE.findall(text.lower())
+.stats-grid{
+  display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:14px;
+}
+.stat{
+  padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+  background: var(--bg3); display:flex; flex-direction:column; gap:4px;
+}
+.stat label{font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text3)}
+.stat strong{font-size:18px; font-weight:700; color:var(--text); font-family:var(--font-mono); line-height:1}
+.stat span{font-size:11px; color:var(--text3); font-family:var(--font-mono)}
+.stat.accent{border-color:rgba(77,159,255,.35); background: linear-gradient(180deg, rgba(77,159,255,.12), var(--bg3))}
 
-# ───────────────────────────────────────────────────────────── embedded corpus
-BUILT_IN_CORPUS = """The architecture of the universe is written in the language of mathematics. 
+/* corpus */
+.corpus-area{padding:14px; display:flex; flex-direction:column; gap:10px}
+.corpus-area textarea{
+  width:100%; min-height:120px; max-height:220px; resize:vertical;
+  padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+  background:var(--bg3); color:var(--text); font-family:var(--font-mono); font-size:12.5px; line-height:1.6;
+}
+.corpus-area textarea:focus{border-color:var(--border3); box-shadow:0 0 0 3px rgba(77,159,255,.12)}
+.file-drop{
+  border:1.5px dashed var(--border2); border-radius:10px; padding:10px;
+  background: rgba(255,255,255,.02); display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  font-family:var(--font-mono); font-size:11px; color:var(--text3);
+}
+.file-drop input[type=file]{font-size:11px; color:var(--text2)}
+.progress{height:4px; background:var(--bg3); border-radius:999px; overflow:hidden; border:1px solid var(--border); display:none}
+.progress i{display:block; height:100%; width:0%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition:width .2s}
+
+/* heatmap legend */
+.heatmap-legend{display:flex; gap:6px; align-items:center; font-family:var(--font-mono); font-size:10px; color:var(--text3)}
+.legend-dot{width:10px;height:10px;border-radius:3px; border:1px solid rgba(255,255,255,.1)}
+
+/* suggestion meta */
+.suggest-meta{
+  padding:8px 14px; border-top:1px solid var(--border); background:rgba(0,0,0,.18);
+  font-family:var(--font-mono); font-size:11px; color:var(--text3); display:flex; gap:12px; flex-wrap:wrap; align-items:center;
+}
+.suggest-meta b{color:var(--text2)}
+.suggest-meta code{
+  background:var(--bg3); border:1px solid var(--border); padding:2px 6px; border-radius:6px; color:var(--accent2); font-size:11px;
+}
+
+/* chips suggestion list (alternative) */
+.alt-list{display:flex; flex-wrap:wrap; gap:6px}
+.alt-chip{
+  padding:5px 10px; border-radius:999px; border:1px solid var(--border);
+  background:var(--bg3); font-family:var(--font-mono); font-size:11px; color:var(--text2);
+  cursor:pointer; transition:.15s;
+}
+.alt-chip:hover{border-color:var(--accent); color:var(--accent); background:rgba(77,159,255,.1)}
+.alt-chip b{color:var(--text); font-weight:600}
+
+/* footer */
+.footer{
+  max-width:1280px; margin:0 auto; padding:0 20px 20px;
+  font-family:var(--font-mono); font-size:11px; color:var(--text4); text-align:center;
+}
+
+/* utility */
+.hidden{display:none !important}
+.sr-only{position:absolute; width:1px;height:1px; padding:0;margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+.divider{height:1px; background:var(--border); margin:2px 0}
+.kbd-row{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+</style>
+</head>
+<body>
+
+<!-- BANNER -->
+<header class="banner" role="banner">
+  <div class="banner-inner">
+<pre class="banner-ascii" aria-hidden="true"> ███╗   ███╗██╗     ██╗     ███╗   ███╗      ███████╗     ██╗
+ ████╗ ████║██║     ██║     ████╗ ████║      ██╔════╝     ██║
+ ██╔████╔██║██║     ██║     ██╔████╔██║█████╗███████╗     ██║<span>  5.1</span>
+ ██║╚██╔╝██║██║     ██║     ██║╚██╔╝██║╚════╝╚════██║██   ██║
+ ██║ ╚═╝ ██║███████╗███████╗██║ ╚═╝ ██║      ███████║╚█████╔╝
+ ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝      ╚══════╝ ╚════╝</pre>
+    <div class="banner-title">
+      <h1>MLLM-5.1 <i>ATLAS</i> — Document Autocomplete Playground</h1>
+      <p><b>GHOST</b> inline autocomplete · VS Code / Copilot style · <b>textarea + overlay</b> · causal n-gram · seeded RNG · offline <b>file://</b></p>
+    </div>
+    <div class="banner-meta">
+      <span class="meta-pill"><span class="dot" id="statusDot"></span> <b id="statusText">Booting</b> · <span id="statusSub">—</span></span>
+      <span class="meta-pill">Dark · Modern · <span style="color:var(--accent)">Netlify</span> ready</span>
+    </div>
+  </div>
+</header>
+
+<!-- APP -->
+<main class="app" id="app" role="main">
+
+  <!-- EDITOR -->
+  <section class="card editor-card" aria-labelledby="editorHeading">
+    <div class="card-head">
+      <h2 id="editorHeading"><i>✎</i> Document Editor — ghost overlay</h2>
+      <div class="card-head-actions">
+        <button class="icon-btn" id="btnClearEditor" title="Clear editor (Ctrl+K)" aria-label="Clear editor">⌫</button>
+        <button class="icon-btn" id="btnCopy" title="Copy document" aria-label="Copy document">⧉</button>
+        <button class="icon-btn" id="btnFocus" title="Focus editor" aria-label="Focus editor">⌖</button>
+      </div>
+    </div>
+    <div class="editor-toolbar" role="toolbar" aria-label="Editor hints">
+      <span><kbd>Tab</kbd> accept</span>
+      <span><kbd>→</kbd> partial</span>
+      <span><kbd>Esc</kbd> dismiss</span>
+      <span><kbd>Ctrl</kbd> <kbd>Space</kbd> trigger</span>
+      <span class="grow"></span>
+      <span class="conf-badge" id="confBadge" aria-live="polite">CONF <b id="confVal">—</b></span>
+      <span id="ghostLen" style="color:var(--text3)">0 chars ghost</span>
+    </div>
+
+    <div class="editor-wrap" id="editorWrap">
+      <div id="ghostLayer" class="ghost-layer" aria-hidden="true"></div>
+      <textarea id="editor" class="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+        placeholder="Start writing… the ghost will appear in dim italic (#9aa0b6) behind your text. Try: &quot;The quick brown fox&quot; or &quot;Artificial intelligence is&quot; — then press Tab."
+        aria-label="Document editor with autocomplete ghost text" aria-describedby="editorHelp"
+        rows="16">The quick brown fox jumps over the lazy dog. Artificial intelligence is the capability of computational systems to perform tasks typically associated with human intelligence</textarea>
+    </div>
+
+    <div class="editor-footer" aria-live="polite">
+      <span>Words <strong id="wordCount">0</strong></span>
+      <span>Chars <strong id="charCount">0</strong></span>
+      <span>Lines <strong id="lineCount">0</strong></span>
+      <span id="cursorInfo" style="color:var(--text3)">Ln 1, Col 1</span>
+      <span class="grow"></span>
+      <span class="heatmap-label">confidence heatmap</span>
+      <span class="heatmap" id="heatmap" aria-label="confidence heatmap"></span>
+      <span class="heatmap-legend" aria-hidden="true">
+        <i class="legend-dot" style="background:#1a3a2a; border-color:#00d084"></i> high
+        <i class="legend-dot" style="background:#3a2a1a; border-color:#ffb020"></i> mid
+        <i class="legend-dot" style="background:#3a1a1a; border-color:#ff4d6a"></i> low
+      </span>
+    </div>
+
+    <div class="suggest-meta" id="suggestMeta">
+      <span>Ghost: <code id="ghostPreview">—</code></span>
+      <span>Tokens: <b id="ghostTokens">0</b></span>
+      <span>Model: <b id="modelLabel">causal 3-gram</b></span>
+      <span id="altWrap" class="hidden">Alt: <span class="alt-list" id="altList"></span></span>
+    </div>
+    <div id="editorHelp" class="sr-only">Ghost text appears behind your typing in italic dim. Press Tab to accept full ghost, Arrow Right to accept one word, Escape to dismiss. Auto-triggers after 180ms of typing.</div>
+  </section>
+
+  <!-- SIDE -->
+  <aside class="side" aria-label="Controls and corpus">
+
+    <!-- Controls -->
+    <section class="card" aria-labelledby="controlsHeading">
+      <div class="card-head"><h2 id="controlsHeading"><i>⚙</i> Inference Controls</h2><span class="hint" id="seedHint">seeded RNG</span></div>
+      <div class="controls-grid">
+        <div class="control">
+          <label for="temp">Temperature <b id="tempVal">0.75</b></label>
+          <input id="temp" type="range" min="0.2" max="1.2" step="0.05" value="0.75" aria-label="Temperature 0.2 to 1.2">
+          <span class="hint">0.2 deterministic — 1.2 creative. Annealed each step.</span>
+        </div>
+        <div class="control">
+          <label for="steps">Effort / Steps <b id="stepsVal">14</b></label>
+          <input id="steps" type="range" min="5" max="40" step="1" value="14" aria-label="Steps 5 to 40">
+          <span class="hint">Max extra tokens to generate per trigger.</span>
+        </div>
+        <div class="control">
+          <label for="minTokens">Min tokens <b id="minTokensVal">1</b></label>
+          <input id="minTokens" type="range" min="1" max="10" step="1" value="1" aria-label="Minimum tokens">
+        </div>
+        <div class="control">
+          <label for="maxTokens">Max tokens <b id="maxTokensVal">14</b></label>
+          <input id="maxTokens" type="range" min="5" max="40" step="1" value="14" aria-label="Maximum tokens">
+        </div>
+        <div class="control">
+          <label for="seed">Seed</label>
+          <input id="seed" type="number" value="1337" placeholder="1337" aria-label="Random seed">
+        </div>
+        <div class="control">
+          <label for="maxN">Max N-gram</label>
+          <select id="maxN" aria-label="Max n-gram">
+            <option value="2">2 — bigram</option>
+            <option value="3" selected>3 — trigram (default)</option>
+            <option value="4">4 — 4-gram</option>
+            <option value="5">5 — 5-gram</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="threshold">Threshold <b id="thrVal">0.04</b></label>
+          <input id="threshold" type="range" min="0.01" max="0.30" step="0.01" value="0.04" aria-label="Confidence threshold">
+          <span class="hint">Drop ghost if edge prob &lt; threshold</span>
+        </div>
+        <div class="control">
+          <label for="anneal">Anneal decay <b id="annealVal">0.96</b></label>
+          <input id="anneal" type="range" min="0.85" max="1.00" step="0.01" value="0.96" aria-label="Anneal decay">
+          <span class="hint">temp ← temp × anneal each token</span>
+        </div>
+        <div class="control full">
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btnTrigger" aria-label="Trigger suggestion">↻ Trigger (Ctrl+Space)</button>
+            <button class="btn" id="btnDismiss" aria-label="Dismiss ghost">✕ Dismiss (Esc)</button>
+            <button class="btn" id="btnAccept" aria-label="Accept ghost">↵ Accept (Tab)</button>
+          </div>
+          <label style="margin-top:8px; flex-direction:row; justify-content:flex-start; text-transform:none; letter-spacing:0; font-size:12px; gap:10px;">
+            <input type="checkbox" id="autoTrigger" checked style="accent-color:var(--accent)"> Auto-trigger (debounced 180ms)
+            <input type="checkbox" id="showHeatmap" checked style="accent-color:var(--accent); margin-left:8px"> Heatmap
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="card" aria-labelledby="statsHeading">
+      <div class="card-head"><h2 id="statsHeading"><i>◈</i> Corpus Stats</h2><span class="hint" id="rebuildTime">—</span></div>
+      <div class="stats-grid">
+        <div class="stat accent"><label>Vocab</label><strong id="statVocab">—</strong><span>unique tokens</span></div>
+        <div class="stat"><label>Tokens</label><strong id="statTokens">—</strong><span>total</span></div>
+        <div class="stat"><label>Sentences</label><strong id="statSent">—</strong><span>. ! ?</span></div>
+        <div class="stat"><label>Words</label><strong id="statWords">—</strong><span>in editor</span></div>
+      </div>
+      <div style="padding:0 14px 14px; display:flex; flex-direction:column; gap:8px">
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <span class="meta-pill" style="font-size:11px">Avg conf <b id="avgConf">—</b></span>
+          <span class="meta-pill" style="font-size:11px">Last <b id="lastConf">—</b></span>
+          <span class="meta-pill" style="font-size:11px">Model <b id="statModel">causal</b></span>
+        </div>
+        <div class="hint">Word count + sentence split update live. Confidence heatmap reflects per-token probability after temperature & floor smoothing.</div>
+      </div>
+    </section>
+
+    <!-- Corpus -->
+    <section class="card" aria-labelledby="corpusHeading">
+      <div class="card-head">
+        <h2 id="corpusHeading"><i>▦</i> Corpus — Topology</h2>
+        <div class="card-head-actions">
+          <button class="btn btn-small" id="btnResetCorpus">Reset</button>
+          <button class="btn btn-small btn-primary" id="btnRebuild">Rebuild</button>
+        </div>
+      </div>
+      <div class="corpus-area">
+        <label for="corpusInput" class="sr-only">Corpus text</label>
+        <textarea id="corpusInput" placeholder="Paste corpus here… (supports .txt upload below). Rebuild will re-learn left-context 1..3 topology."></textarea>
+        <div class="file-drop">
+          <span>↥ Upload .txt</span>
+          <input type="file" id="fileInput" accept=".txt,.md,.csv,.json" aria-label="Upload corpus text file">
+          <span id="fileName" class="hint">—</span>
+        </div>
+        <div class="progress" id="progress"><i id="progressBar"></i></div>
+        <div class="btn-row">
+          <button class="btn btn-small" id="btnUseSelection">Use selection → Corpus</button>
+          <button class="btn btn-small" id="btnUseEditor">Use editor text</button>
+          <button class="btn btn-small" id="btnExport">Export .txt</button>
+        </div>
+        <div class="hint" id="corpusHint">Built-in: <b id="corpusChars">—</b> chars · Left-context causal only (1..3). Candidate distribution with <code>_FLOOR=1e-5</code> + annealed temp + seeded RNG. Sorted candidates each step.</div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="helpHeading">
+      <div class="card-head"><h2 id="helpHeading"><i>?</i> Help</h2></div>
+      <div style="padding:12px 14px; display:flex; flex-direction:column; gap:10px; font-size:12px; color:var(--text2); line-height:1.6">
+        <div><b style="color:var(--text)">Ghost overlay technique:</b> <code style="font-family:var(--font-mono); background:var(--bg3); border:1px solid var(--border); padding:1px 6px; border-radius:6px">textarea</code> (z 2, transparent bg, <code>#e8eeff</code>) over <code>div.ghost-layer</code> (z 1, <code>white-space:pre-wrap</code>, sync scroll). Ghost in <code style="color:var(--ghost); font-style:italic">#9aa0b6 italic</code>.</div>
+        <div class="divider"></div>
+        <div><b style="color:var(--text)">Logic:</b> Python MLLM-5.1 <code>BUILT_IN_CORPUS</code> → JS <code>tokenize</code> (<code>/\b[a-z0-9']+\b|[.!?]/</code>) → causal n-gram 1..3 → successor Counter → <code>_FLOOR=1e-5</code> smoothing → annealed temp (1.2→0.2) → sorted candidates → seeded <code>mulberry32</code> → <code>suggest(prefix) → {text, confidence}</code>.</div>
+        <div><b style="color:var(--text)">States:</b> hover/focus/disabled/loading/error on all controls. Keyboard: Tab, Esc, Ctrl+Space. Focus ring visible. Contrast AA.</div>
+      </div>
+    </section>
+
+  </aside>
+</main>
+
+<footer class="footer">
+  Single file · no external deps · works offline via <code>file://</code> and Netlify. Inline &lt;style&gt; & &lt;script&gt;. Ghost overlay · causal topology · seeded autocomplete.
+</footer>
+
+<script>
+/* ── BUILT_IN_CORPUS — ported from MLLM-5.1.py / mllm5_atlass.py ───────── */
+const BUILT_IN_CORPUS = `The architecture of the universe is written in the language of mathematics. 
 From the spiraling arms of distant galaxies to the intricate folding of proteins 
 within a single cell, patterns emerge from chaos. Artificial intelligence, 
 in its nascent stages, seeks to mimic this pattern recognition. 
@@ -1186,632 +1719,742 @@ Frost is a layer of ice on a solid surface, which forms from water vapor that de
 In classical music, a fugue is a contrapuntal, polyphonic compositional technique in two or more voices. 
 
 A fungus is any member of the group of eukaryotic organisms that includes microorganisms such as yeasts and molds.
-"""
-# ───────────────────────────────────────────────────────────── terminal colors
+`;
 
-_CODES = {
-    "bold": "\033[1m",
-    "dim": "\033[2m",
-    "cyan": "\033[36m",
-    "green": "\033[32m",
-    "yellow": "\033[33m",
-    "magenta": "\033[35m",
-    "red": "\033[31m",
+/* ── JS ENGINE: Ghost Autocomplete ──────────────────────────────────── */
+
+/* Seeded RNG — mulberry32 (deterministic, fast) */
+function mulberry32(seed){
+  let a = seed >>> 0;
+  return function(){
+    a += 0x6D2B79F5;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
-_RESET = "\033[0m"
-_MASK_STYLED = "\033[41m\033[37m[MASK]\033[0m"
-
-
-class Term:
-    """ANSI painter that auto-disables when not a tty or NO_COLOR is set."""
-
-    def __init__(self, enabled: bool = True) -> None:
-        self.enabled = enabled
-
-    @classmethod
-    def detect(cls, no_color: bool = False, stream=None) -> "Term":
-        if stream is None:
-            stream = sys.stdout
-        is_tty = hasattr(stream, "isatty") and stream.isatty()
-        enabled = not no_color and is_tty and os.environ.get("NO_COLOR") is None
-        return cls(enabled=enabled)
-
-    def paint(self, color: str, text: str) -> str:
-        if not self.enabled:
-            return text
-        code = _CODES.get(color, "")
-        return f"{code}{text}{_RESET}" if code else text
-
-    @property
-    def mask(self) -> str:
-        return _MASK_STYLED if self.enabled else "[MASK]"
-
-
-# ───────────────────────────────────────────────────────────── topology
-
-class BidirectionalTopology:
-    """Bidirectional n-gram statistics over a corpus.
-
-    For every observed word we count which words appear to its left/right
-    at distances 1..max_n. Totals are cached to avoid re-summing.
-    Autocomplete uses left side only; right side kept for compatibility
-    and for optional diffusion-style generation.
-    """
-
-    def __init__(self, max_n: int = 3) -> None:
-        if max_n < 1:
-            raise ValueError(f"max_n must be >= 1, got {max_n}")
-        self.max_n = max_n
-        self.left_counts: dict[int, dict[tuple[str, ...], Counter[str]]] = {
-            n: defaultdict(Counter) for n in range(1, max_n + 1)
-        }
-        self.right_counts: dict[int, dict[tuple[str, ...], Counter[str]]] = {
-            n: defaultdict(Counter) for n in range(1, max_n + 1)
-        }
-        self.left_totals: dict[int, dict[tuple[str, ...], int]] = {
-            n: {} for n in range(1, max_n + 1)
-        }
-        self.right_totals: dict[int, dict[tuple[str, ...], int]] = {
-            n: {} for n in range(1, max_n + 1)
-        }
-        self.unigrams: Counter[str] = Counter()
-        self.vocab: set[str] = set()
-        self.sentences: int = 0
-        self.tokens: int = 0
-
-    @classmethod
-    def from_text(cls, text: str, max_n: int = 3) -> "BidirectionalTopology":
-        topo = cls(max_n=max_n)
-        topo.ingest(text)
-        return topo
-
-    def ingest(self, text: str) -> None:
-        if not text or not text.strip():
-            raise ValueError("corpus text is empty")
-        flattened = WHITESPACE_RE.sub(" ", text).strip()
-        ingested = 0
-        for sentence in SENTENCE_SPLIT_RE.split(flattened):
-            words = tokenize(sentence)
-            if not words:
-                continue
-            self.sentences += 1
-            ingested += len(words)
-            self.vocab.update(words)
-            self.unigrams.update(words)
-            for n in range(1, self.max_n + 1):
-                for i, target in enumerate(words):
-                    if i >= n:
-                        ctx = tuple(words[i - n: i])
-                        self.left_counts[n][ctx][target] += 1
-                        self.left_totals[n][ctx] = self.left_totals[n].get(ctx, 0) + 1
-                    if i + n < len(words):
-                        ctx = tuple(words[i + 1: i + 1 + n])
-                        self.right_counts[n][ctx][target] += 1
-                        self.right_totals[n][ctx] = self.right_totals[n].get(ctx, 0) + 1
-        self.tokens += ingested
-        if ingested == 0:
-            raise ValueError("corpus text contains no usable tokens")
-
-
-# ───────────────────────────────────────────────────────────── diffusion engine (legacy) + autocomplete
-
-_FLOOR = 1e-5
-_UNIGRAM_WEIGHT = 0.1
-_BACKOFF_SIZE = 50
-
-StepCallback = Callable[[list[str], int, int], None]
-
-@dataclass
-class DenoiseResult:
-    sequence: list[str]
-    confidences: list[float]
-
-@dataclass
-class CompleteResult:
-    prefix: list[str]
-    continuation: list[str]
-    confidences: list[float]
-    full_sequence: list[str]
-
-
-class DiscreteDiffusionEngine:
-    """N-gram engine: diffusion (bidirectional, legacy) + causal autocomplete."""
-
-    def __init__(self, topo: BidirectionalTopology, rng: random.Random | None = None) -> None:
-        self.topo = topo
-        self.rng = rng if rng is not None else random.Random()
-        self._backoff = [w for w, _ in topo.unigrams.most_common(_BACKOFF_SIZE)]
-
-    def _active_contexts(self, seq: Sequence[str], idx: int):
-        for n in range(1, self.topo.max_n + 1):
-            if idx >= n:
-                ctx = tuple(seq[idx - n: idx])
-                if MASK not in ctx:
-                    yield "left", n, ctx
-            if idx + n < len(seq):
-                ctx = tuple(seq[idx + 1: idx + 1 + n])
-                if MASK not in ctx:
-                    yield "right", n, ctx
-
-    def _causal_contexts(self, seq: Sequence[str], idx: int):
-        """Only left contexts — for autocomplete."""
-        for n in range(1, self.topo.max_n + 1):
-            if idx >= n:
-                ctx = tuple(seq[idx - n: idx])
-                if MASK not in ctx:
-                    yield "left", n, ctx
-
-    def candidate_distribution(self, seq: Sequence[str], idx: int) -> dict[str, float]:
-        """Pure (no mutation) softmax over candidates for position *idx* — bidirectional (legacy)."""
-        base = 0.0
-        contrib: dict[str, float] = {}
-        for side, n, ctx in self._active_contexts(seq, idx):
-            if side == "left":
-                counts = self.topo.left_counts[n].get(ctx)
-                total = self.topo.left_totals[n].get(ctx, 0)
-            else:
-                counts = self.topo.right_counts[n].get(ctx)
-                total = self.topo.right_totals[n].get(ctx, 0)
-            if not counts or total <= 0:
-                continue
-            base += math.log(_FLOOR) * n
-            floor_adj = math.log(_FLOOR) * n
-            for word, count in counts.items():
-                contrib[word] = contrib.get(word, 0.0) + (
-                    math.log(count / total + _FLOOR) * n - floor_adj
-                )
-        candidates = sorted(set(contrib) | set(self._backoff))
-        energies = {
-            w: math.log(self.topo.unigrams.get(w, 1) + 1) * _UNIGRAM_WEIGHT + base + contrib.get(w, 0.0)
-            for w in candidates
-        }
-        max_e = max(energies.values())
-        exps = {w: math.exp(e - max_e) for w, e in energies.items()}
-        total = sum(exps.values())
-        return {w: e / total for w, e in exps.items()}
-
-    def causal_distribution(self, seq: Sequence[str], idx: int) -> dict[str, float]:
-        """Causal (left-only) distribution — used for autocomplete."""
-        base = 0.0
-        contrib: dict[str, float] = {}
-        for _, n, ctx in self._causal_contexts(seq, idx):
-            counts = self.topo.left_counts[n].get(ctx)
-            total = self.topo.left_totals[n].get(ctx, 0)
-            if not counts or total <= 0:
-                continue
-            base += math.log(_FLOOR) * n
-            floor_adj = math.log(_FLOOR) * n
-            for word, count in counts.items():
-                contrib[word] = contrib.get(word, 0.0) + (
-                    math.log(count / total + _FLOOR) * n - floor_adj
-                )
-        candidates = sorted(set(contrib) | set(self._backoff))
-        energies = {
-            w: math.log(self.topo.unigrams.get(w, 1) + 1) * _UNIGRAM_WEIGHT + base + contrib.get(w, 0.0)
-            for w in candidates
-        }
-        max_e = max(energies.values())
-        exps = {w: math.exp(e - max_e) for w, e in energies.items()}
-        total = sum(exps.values())
-        return {w: e / total for w, e in exps.items()}
-
-    def complete(
-        self,
-        prefix: Sequence[str],
-        max_tokens: int = 12,
-        temperature: float = 0.35,
-        threshold: float = 0.0,
-    ) -> CompleteResult:
-        """Left-to-right autocomplete: continue prefix token by token."""
-        seq = [w.lower() for w in prefix]
-        confidences: list[float] = []
-        continuation: list[str] = []
-        for _ in range(max_tokens):
-            idx = len(seq)
-            probs = self.causal_distribution(seq, idx)
-            if not probs:
-                break
-            # temperature-scaled sampling
-            if temperature <= 0:
-                chosen = max(probs, key=probs.get)
-                conf = probs[chosen]
-            else:
-                words = list(probs)
-                weights = [p ** (1.0 / max(temperature, 1e-6)) for p in probs.values()]
-                chosen = self.rng.choices(words, weights=weights, k=1)[0]
-                conf = probs[chosen]
-            if conf < threshold:
-                break
-            seq.append(chosen)
-            continuation.append(chosen)
-            confidences.append(conf)
-            # stop early on sentence end if we already generated a few tokens
-            if chosen in {".", "!", "?"} and len(continuation) >= 4:
-                break
-        full_conf = [1.0]*len(prefix) + confidences
-        return CompleteResult(prefix=list(prefix), continuation=continuation, confidences=confidences, full_sequence=seq)
-
-    def denoise(
-        self,
-        target_len: int,
-        steps: int,
-        prompt: Sequence[str] = (),
-        on_step: StepCallback | None = None,
-    ) -> DenoiseResult:
-        if target_len < 1:
-            raise ValueError(f"target_len must be >= 1, got {target_len}")
-        if steps < 1:
-            raise ValueError(f"steps must be >= 1, got {steps}")
-
-        seq = [MASK] * target_len
-        locked: set[int] = set()
-        for i, w in enumerate(prompt[:target_len]):
-            seq[i] = w.lower()
-            locked.add(i)
-
-        confidences = [0.0] * target_len
-        for t in range(1, steps + 1):
-            temp = 1.2 * (1.0 - t / steps) + 0.2
-            current: dict[int, float] = {}
-            for i in range(target_len):
-                if i in locked or seq[i] != MASK:
-                    continue
-                probs = self.candidate_distribution(seq, i)
-                words = list(probs)
-                weights = [p ** (1.0 / temp) for p in probs.values()]
-                chosen = self.rng.choices(words, weights=weights, k=1)[0]
-                seq[i] = chosen
-                current[i] = probs[chosen]
-                confidences[i] = probs[chosen]
-            re_mask_ratio = max(0.0, 1.0 - t / steps)
-            num_to_remask = int(len(current) * re_mask_ratio)
-            if num_to_remask > 0 and current:
-                for idx in sorted(current, key=current.get)[:num_to_remask]:
-                    seq[idx] = MASK
-                    confidences[idx] = 0.0
-            if on_step is not None:
-                on_step(list(seq), t, steps)
-        return DenoiseResult(sequence=seq, confidences=confidences)
-
-
-# ───────────────────────────────────────────────────────────── CLI helpers
-
-logger = logging.getLogger("mllm51")
-BANNER = r"""
- ███╗   ███╗██╗     ██╗     ███╗   ███╗      ███████╗   ██╗  ██╗
- ████╗ ████║██║     ██║     ████╗ ████║      ██╔════╝   ██║  ██║
- ██╔████╔██║██║     ██║     ██╔████╔██║█████╗███████╗   ███████║
- ██║╚██╔╝██║██║     ██║     ██║╚██╔╝██║╚════╝╚════██║   ╚════██║
- ██║ ╚═╝ ██║███████╗███████╗██║ ╚═╝ ██║      ███████║██╗██║  ██║
- ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝      ╚══════╝╚═╝╚═╝  ╚═╝
-        Autocomplete · Causal · Ghost-Text · Document Editor
-"""
-
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        prog="MLLM-5.1",
-        description="Document autocomplete LM — continues your prefix left-to-right using causal n-gram diffusion topology.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent("""\
-            examples:
-              python MLLM-5.1.py "the quick brown" --steps 12 --seed 42
-              python MLLM-5.1.py autocomplete "what is an atom" --steps 16
-              python MLLM-5.1.py generate "hello world" --show-steps --extra-tokens 8 14
-              python MLLM-5.1.py --corpus ./my.txt autocomplete "hello"
-
-            tips:
-              --steps is the effort/length knob.
-              --temperature low (0.2) = deterministic ghost; high (1.0) = creative.
-              --seed makes output reproducible.
-              In REPL, Tab accepts ghost, Esc dismisses. Try index.html playground!
-        """),
-    )
-    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    p.add_argument("--corpus", type=Path, default=None, help="path to training corpus (default: embedded)")
-    p.add_argument("--seed", type=int, default=None, help="seed for reproducible sampling")
-    p.add_argument("--no-color", action="store_true", help="disable ANSI colors")
-    p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
-
-    def add_decoding_args(sub):
-        sub.add_argument("--steps", type=int, default=16, help="max tokens to generate / diffusion steps (default: 16)")
-        sub.add_argument("--extra-tokens", type=int, nargs=2, default=None, metavar=("MIN", "MAX"),
-                         help="range of tokens beyond prefix (default: steps..steps, alias for --steps)")
-        sub.add_argument("--temperature", type=float, default=0.35, help="sampling temperature 0.0=greedy ..1.2=creative (default 0.35)")
-        sub.add_argument("--threshold", type=float, default=0.0, help="min confidence to emit token (default 0.0)")
-        sub.add_argument("--max-ngram", type=int, default=3, help="max n-gram order (default 3)")
-        sub.add_argument("--show-steps", action="store_true", help="render intermediate diffusion states (generate only)")
-        # allow global flags also after subcommand
-        sub.add_argument("--seed", type=int, default=None, dest="seed_sub", help=argparse.SUPPRESS)
-        sub.add_argument("--corpus", type=Path, default=None, dest="corpus_sub", help=argparse.SUPPRESS)
-        sub.add_argument("--no-color", action="store_true", dest="no_color_sub", help=argparse.SUPPRESS)
-        sub.add_argument("-v", "--verbose", action="store_true", dest="verbose_sub", help=argparse.SUPPRESS)
-
-    subs = p.add_subparsers(dest="command")
-    ac = subs.add_parser("autocomplete", help="autocomplete a prefix (default)")
-    ac.add_argument("prompt", nargs="?", default=None, help="prefix text to continue")
-    add_decoding_args(ac)
-
-    gen = subs.add_parser("generate", help="alias for autocomplete (legacy diffusion)")
-    gen.add_argument("prompt", nargs="?", default=None, help="prefix text")
-    add_decoding_args(gen)
-
-    chat = subs.add_parser("chat", help="interactive autocomplete REPL (alias)")
-    add_decoding_args(chat)
-
-    comp = subs.add_parser("complete", help=argparse.SUPPRESS)
-    comp.add_argument("prompt", nargs="?", default=None, help=argparse.SUPPRESS)
-    add_decoding_args(comp)
-
-    return p
-
-
-def load_topology(corpus_path: Path | None, term: Term, max_n: int = 3) -> BidirectionalTopology:
-    t0 = time.time()
-    if corpus_path is not None:
-        logger.info("loading corpus from %s", corpus_path)
-        text = corpus_path.read_text(encoding="utf-8")
-        topo = BidirectionalTopology.from_text(text, max_n=max_n)
-        src = str(corpus_path)
-    else:
-        logger.info("using embedded built-in corpus")
-        text = BUILT_IN_CORPUS
-        topo = BidirectionalTopology.from_text(text, max_n=max_n)
-        src = "embedded"
-    dt = time.time() - t0
-    print(term.paint("dim", f"· corpus: {src}"))
-    print(term.paint("dim", f"· topology: {len(topo.vocab)} vocab · {topo.tokens} tokens · {topo.sentences} sentences · {dt:.2f}s  (causal n={max_n})"))
-    logger.info("topology: %d vocab %d tokens %d sents in %.2fs", len(topo.vocab), topo.tokens, topo.sentences, dt)
-    return topo
-
-
-def make_step_printer(term: Term):
-    def _print(seq: list[str], step: int, total: int) -> None:
-        interval = max(1, total // 5)
-        if step % interval != 0 and step != total:
-            return
-        bar_len = 20
-        filled = int(bar_len * (step / total))
-        bar = "█" * filled + "░" * (bar_len - filled)
-        display = "".join(term.paint("red", "_") if w == MASK else term.paint("green", w[0]) for w in seq)
-        print(term.paint("dim", f"[Step {step:02d}/{total}] {bar}") + " " + display)
-    return _print
-
-
-def assemble_autocomplete(prefix_words: Sequence[str], cont: Sequence[str]) -> tuple[str, str]:
-    prefix_str = " ".join(prefix_words)
-    cont_str = " ".join(cont)
-    for mark in (",", ".", "!", "?"):
-        cont_str = cont_str.replace(f" {mark}", mark)
-    if prefix_str and cont_str and not prefix_str.endswith((" ", ".", "!", "?")):
-        prefix_str += " "
-    if cont_str:
-        # capitalize first char of continuation if prefix ends with sentence boundary
-        if not prefix_str or prefix_str.rstrip().endswith((".", "!", "?")):
-            cont_str = cont_str[0].upper() + cont_str[1:] if cont_str else cont_str
-    return prefix_str, cont_str
-
-
-def assemble_text(prompt_words: Sequence[str], result: DenoiseResult) -> tuple[str, str]:
-    prompt_str = " ".join(prompt_words)
-    gen_words = [w for i, w in enumerate(result.sequence) if i >= len(prompt_words) and w != MASK]
-    gen_str = " ".join(gen_words)
-    for mark in (",", ".", "!", "?"):
-        gen_str = gen_str.replace(f" {mark}", mark)
-    if prompt_str and not prompt_str.endswith((" ", ".", "!", "?")):
-        prompt_str += " "
-    if gen_str:
-        gen_str = gen_str[0].upper() + gen_str[1:]
-    return prompt_str, gen_str
-
-
-def render_autocomplete(term: Term, prefix_words: Sequence[str], result: CompleteResult, show_heatmap: bool = True) -> None:
-    prefix_str, cont_str = assemble_autocomplete(prefix_words, result.continuation)
-    print()
-    print(term.paint("cyan", term.paint("bold", "Autocomplete:")))
-    # ghost style: prefix normal, continuation dim/italic-like
-    print(term.paint("cyan", prefix_str) + term.paint("dim", cont_str))
-    if show_heatmap and result.continuation:
-        print()
-        print(term.paint("dim", "Confidence:"))
-        chips = []
-        for c in result.confidences:
-            color = "green" if c > 0.35 else "yellow" if c > 0.15 else "red"
-            chips.append(term.paint(color, "█"))
-        print("".join(chips) + term.paint("dim", f"  avg {sum(result.confidences)/len(result.confidences):.2f}"))
-        print(term.paint("dim", "[Green=High  Yellow=Med  Red=Low]  Tab=accept  Esc=dismiss"))
-
-
-def render_result(term: Term, prompt_words: Sequence[str], result: DenoiseResult) -> None:
-    prompt_str, gen_str = assemble_text(prompt_words, result)
-    print()
-    print(term.paint("cyan", term.paint("bold", "Full Sculpted Text:")))
-    print(term.paint("cyan", prompt_str) + term.paint("magenta", term.paint("bold", gen_str)))
-    heat = []
-    for i, word in enumerate(result.sequence):
-        if word == MASK:
-            continue
-        if i < len(prompt_words):
-            heat.append(term.paint("cyan", "█"))
-        else:
-            c = result.confidences[i]
-            color = "green" if c > 0.6 else "yellow" if c > 0.3 else "red"
-            heat.append(term.paint(color, "█"))
-    print()
-    print(term.paint("dim", "Confidence Heatmap (Prompt | Generated):"))
-    print("".join(heat))
-    print(term.paint("dim", "[Green=High  Yellow=Med  Red=Low]"))
-
-
-def _get_max_tokens(args) -> int:
-    if getattr(args, "extra_tokens", None):
-        lo, hi = args.extra_tokens
-        # for autocomplete, use hi as max
-        return int(hi)
-    return int(getattr(args, "steps", 16))
-
-
-def do_autocomplete(engine: DiscreteDiffusionEngine, text: str, max_tokens: int, temperature: float, threshold: float) -> tuple[list[str], CompleteResult]:
-    prefix_words = tokenize(text) if text else []
-    res = engine.complete(prefix=prefix_words, max_tokens=max_tokens, temperature=temperature, threshold=threshold)
-    return prefix_words, res
-
-
-def cmd_autocomplete(args: argparse.Namespace, engine: DiscreteDiffusionEngine, term: Term) -> int:
-    # prompt may be in args.prompt or global prefix
-    prompt_text = getattr(args, "prompt", None) or getattr(args, "prefix", None) or ""
-    if not prompt_text:
-        # if no prompt provided via CLI, fall back to REPL
-        return cmd_chat(args, engine, term)
-    max_tokens = _get_max_tokens(args)
-    prefix_words, result = do_autocomplete(engine, prompt_text, max_tokens, float(getattr(args, "temperature", 0.35)), float(getattr(args, "threshold", 0.0)))
-    render_autocomplete(term, prefix_words, result)
-    return 0
-
-
-def cmd_generate(args: argparse.Namespace, engine: DiscreteDiffusionEngine, term: Term) -> int:
-    # legacy diffusion path if --show-steps requested, else use autocomplete
-    if getattr(args, "show_steps", False):
-        on_step = make_step_printer(term)
-        prompt_text = getattr(args, "prompt", None) or getattr(args, "prefix", None) or ""
-        prompt_words = tokenize(prompt_text) if prompt_text else []
-        lo, hi = tuple(args.extra_tokens) if args.extra_tokens else (int(args.steps), int(args.steps))
-        # for legacy we keep diffusion: use hi as extra
-        target_len = len(prompt_words) + engine.rng.randint(lo, hi)
-        result = engine.denoise(target_len=target_len, steps=int(args.steps), prompt=prompt_words, on_step=on_step)
-        render_result(term, prompt_words, result)
-        return 0
-    # otherwise autocomplete
-    return cmd_autocomplete(args, engine, term)
-
-
-def cmd_chat(args: argparse.Namespace, engine: DiscreteDiffusionEngine, term: Term) -> int:
-    print(term.paint("magenta", term.paint("bold", "\n› MLLM-5.1 Autocomplete — type a prefix, Tab to accept ghost.  :help  [quit] to exit.")))
-    print(term.paint("dim", "  (causal n-gram, left context only — continues your document)\n"))
-    while True:
-        try:
-            raw = input(term.paint("bold", "› ")).strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not raw:
-            continue
-        low = raw.lower()
-        if low in {"[quit]", "quit", "exit", ":quit", ":q"}:
-            break
-        if low in {":help", "help", "?"}:
-            print(term.paint("dim", "  commands: [quit]/exit  :help  :clear  :steps N  :temp N  :seed N  :show on|off"))
-            print(term.paint("dim", "  flags: --steps N --temperature T --threshold T --max-ngram N --seed N --corpus PATH"))
-            print(term.paint("dim", "  playground: open index.html in browser for ghost-text editor"))
-            continue
-        if low in {":clear", "clear"}:
-            os.system("clear" if os.name != "nt" else "cls")
-            continue
-        if low.startswith(":steps"):
-            try:
-                n = int(low.split()[1])
-                if n < 1: raise ValueError
-                args.steps = n
-                print(term.paint("dim", f"  steps → {n}"))
-            except Exception:
-                print(term.paint("red", "  usage: :steps <positive int>"))
-            continue
-        if low.startswith(":temp"):
-            try:
-                t = float(low.split()[1])
-                args.temperature = t
-                print(term.paint("dim", f"  temperature → {t}"))
-            except Exception:
-                print(term.paint("red", "  usage: :temp <float 0.0-1.2>"))
-            continue
-        if low.startswith(":seed"):
-            try:
-                if low.split()[1].lower() == "none":
-                    engine.rng = random.Random()
-                    print(term.paint("dim", "  seed → random"))
-                else:
-                    s = int(low.split()[1])
-                    engine.rng = random.Random(s)
-                    print(term.paint("dim", f"  seed → {s}"))
-            except Exception:
-                print(term.paint("red", "  usage: :seed <int>  or  :seed none"))
-            continue
-
-        # treat input as prefix to autocomplete
-        max_tokens = _get_max_tokens(args)
-        prefix_words, result = do_autocomplete(engine, raw, max_tokens, float(getattr(args, "temperature", 0.35)), float(getattr(args, "threshold", 0.0)))
-        render_autocomplete(term, prefix_words, result)
-        print()
-    return 0
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    # allow global flags also after subcommand
-    seed = getattr(args, "seed_sub", None) if getattr(args, "seed_sub", None) is not None else getattr(args, "seed", None)
-    corpus_arg = getattr(args, "corpus_sub", None) if getattr(args, "corpus_sub", None) is not None else getattr(args, "corpus", None)
-    no_color = bool(getattr(args, "no_color", False) or getattr(args, "no_color_sub", False))
-    verbose = bool(getattr(args, "verbose", False) or getattr(args, "verbose_sub", False))
-
-    logging.basicConfig(level=logging.DEBUG if verbose else logging.WARNING,
-                        format="%(levelname)s %(name)s: %(message)s")
-    term = Term.detect(no_color)
-
-    if term.enabled:
-        print(term.paint("cyan", BANNER.strip("\n")))
-        print(term.paint("dim", f"  v{__version__}  ·  autocomplete LM  ·  causal n=3  ·  ghost-text"))
-        print()
-    else:
-        print(f"MLLM-5.1 v{__version__} — autocomplete LM")
-
-
-
-    # validate extra-tokens
-    try:
-        extra = tuple(args.extra_tokens) if getattr(args, "extra_tokens", None) else None
-    except Exception:
-        extra = None
-    if extra and len(extra) == 2 and extra[0] > extra[1]:
-        print("mllm51: error: --extra-tokens MIN must be <= MAX", file=sys.stderr)
-        return 2
-
-    max_n = int(getattr(args, "max_ngram", 3)) if hasattr(args, "max_ngram") else 3
-    corpus_path = Path(corpus_arg) if corpus_arg else None
-    try:
-        topo = load_topology(corpus_path, term, max_n=max_n)
-    except (OSError, ValueError) as exc:
-        print(f"mllm51: error: cannot load corpus {corpus_path or 'embedded'}: {exc}", file=sys.stderr)
-        return 2
-
-    # patch args for downstream
-    if extra:
-        args.extra_tokens = extra
-    else:
-        # default extra_tokens = steps..steps for autocomplete
-        args.extra_tokens = (int(getattr(args, "steps", 16)), int(getattr(args, "steps", 16)))
-    if not hasattr(args, "steps") or args.steps is None:
-        args.steps = 16
-    if not hasattr(args, "temperature"):
-        args.temperature = 0.35
-    if not hasattr(args, "threshold"):
-        args.threshold = 0.0
-
-    engine = DiscreteDiffusionEngine(topo, rng=random.Random(seed))
-    cmd = getattr(args, "command", None)
-    if cmd in ("autocomplete", "complete") or (cmd is None and getattr(args, "prefix", None) is None):
-        # default REPL if no command and no prefix
-        if cmd in ("autocomplete", "complete") and getattr(args, "prompt", None):
-            return cmd_autocomplete(args, engine, term)
-        # check if generate/complete were called with prompt
-        if cmd == "generate":
-            return cmd_generate(args, engine, term)
-        return cmd_chat(args, engine, term)
-    if cmd == "generate":
-        return cmd_generate(args, engine, term)
-    if cmd == "chat":
-        return cmd_chat(args, engine, term)
-    return cmd_chat(args, engine, term)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+function hashSeed(str){
+  let h = 2166136261;
+  for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h,16777619); }
+  return h >>> 0;
+}
+
+/* Tokenize: mirrors Python TOKEN_RE = r"\b[a-zA-Z0-9']+\b|[.!?]" */
+function tokenize(text){
+  if(!text) return [];
+  const lower = text.toLowerCase();
+  const m = lower.match(/\b[a-z0-9']+\b|[.!?]/g);
+  return m ? m.filter(t=>t.trim()) : [];
+}
+function detokenize(tokens){
+  if(!tokens.length) return "";
+  let s = tokens.join(' ');
+  s = s.replace(/\s+([.!?,;:'")\]])/g,'$1');
+  s = s.replace(/([(\["'])\s+/g,'$1');
+  s = s.replace(/\s+-\s+/g,' - ');
+  return s;
+}
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function countSentences(text){
+  const m = text.match(/[.!?]+/g);
+  return m ? m.length : (text.trim()?1:0);
+}
+
+/* ── Causal Topology (BidirectionalTopology-like but causal only) ── */
+class CausalTopology{
+  constructor(maxN=3){
+    this.maxN = maxN;
+    this._FLOOR = 1e-5 // matches MLLM-5.1.py _FLOOR; // smoothing floor
+    this._FLOOR_LOG = Math.log(this._FLOOR);
+    this.trained = false;
+    this.vocab = new Set();
+    this.tokenFreq = new Map();
+    this.totalTokens = 0;
+    this.ngramCtx = {}; // n -> Map(key -> Map(next->count))
+    this.sentenceCount = 0;
+  }
+  train(corpus){
+    const tokens = tokenize(corpus);
+    this.totalTokens = tokens.length;
+    this.vocab = new Set(tokens);
+    this.tokenFreq = new Map();
+    for(const t of tokens) this.tokenFreq.set(t, (this.tokenFreq.get(t)||0)+1);
+    this.ngramCtx = {};
+    for(let n=1;n<=this.maxN;n++){
+      const map = new Map();
+      for(let i=0;i< tokens.length - n; i++){
+        const key = tokens.slice(i,i+n).join('\x00');
+        const nxt = tokens[i+n];
+        let inner = map.get(key);
+        if(!inner){ inner = new Map(); map.set(key, inner); }
+        inner.set(nxt, (inner.get(nxt)||0)+1);
+      }
+      this.ngramCtx[n]=map;
+    }
+    this.sentenceCount = countSentences(corpus);
+    this.trained = true;
+    return this;
+  }
+  rebuild(corpus, maxN){
+    if(maxN) this.maxN = maxN;
+    return this.train(corpus);
+  }
+  // successor lookup for causal left context 1..3
+  _successors(contextTokens){
+    const max = Math.min(contextTokens.length, this.maxN);
+    for(let n=max; n>=1; n--){
+      const key = contextTokens.slice(-n).join('\x00');
+      const bucket = this.ngramCtx[n]?.get(key);
+      if(bucket && bucket.size>0) return {bucket, n};
+    }
+    return null;
+  }
+  // candidate distribution with _FLOOR and temperature, sorted candidates, seeded RNG
+  _distribution(bucket, temperature, rng){
+    // bucket: Map(word->count)
+    const entries = [...bucket.entries()];
+    const total = entries.reduce((s,[,c])=>s+c,0);
+    const vocabSize = this.vocab.size || 1;
+    // Apply _FLOOR additive smoothing concept: add floor mass
+    // prob = (count/total)*(1 - floor*vocabSize?) simplified: (count + floor*total?) Keep stable
+    // We'll compute smoothed probs as per spec: candidate distribution with _FLOOR
+    let probs = entries.map(([w,c])=>{
+      // base prob with floor
+      const base = c/total;
+      // add floor for unseen? We'll mix floor uniformly: prob = (1 - _FLOOR)*base + _FLOOR/vocabSize
+      // This guarantees floor mass distributed
+      const smoothed = (1 - this._FLOOR) * base + (this._FLOOR / vocabSize);
+      return {word:w, count:c, prob:smoothed};
+    });
+    // temperature scaling: p^(1/T) then renormalize (annealing handled outside)
+    if(temperature !== 1.0 && temperature>0){
+      const invT = 1/temperature;
+      let powed = probs.map(p=> Math.pow(p.prob, invT));
+      const sum = powed.reduce((a,b)=>a+b,0);
+      powed.forEach((v,i)=> probs[i].prob = v/sum);
+    } else {
+      const sum = probs.reduce((s,p)=>s+p.prob,0);
+      probs.forEach(p=> p.prob /= sum);
+    }
+    // sorted candidates descending by prob
+    probs.sort((a,b)=> b.prob - a.prob);
+    return probs;
+  }
+  _weightedPick(dist, rng){
+    const r = rng();
+    let cum=0;
+    for(const cand of dist){
+      cum+=cand.prob;
+      if(r <= cum) return cand;
+    }
+    return dist[dist.length-1];
+  }
+  // Fallback unigram distribution with floor
+  _unigramDist(temperature){
+    const entries = [...this.tokenFreq.entries()];
+    const total = this.totalTokens || 1;
+    let probs = entries.map(([w,c])=>{
+      const base = c/total;
+      const smoothed = (1 - this._FLOOR)*base + (this._FLOOR / this.vocab.size);
+      return {word:w, prob: smoothed};
+    });
+    if(temperature!==1.0 && temperature>0){
+      const invT=1/temperature;
+      let powed = probs.map(p=>Math.pow(p.prob, invT));
+      const sum=powed.reduce((a,b)=>a+b,0);
+      powed.forEach((v,i)=> probs[i].prob=v/sum);
+    } else {
+      const sum=probs.reduce((s,p)=>s+p.prob,0);
+      probs.forEach(p=>p.prob/=sum);
+    }
+    probs.sort((a,b)=>b.prob-a.prob);
+    return probs;
+  }
+
+  /* predict next word with full distribution */
+  predictNext(contextTokens, temperature=0.8, rng=Math.random){
+    if(!this.trained) return {word:"<UNK>", prob:0, dist:[]};
+    const hit = this._successors(contextTokens);
+    let dist;
+    if(hit){
+      dist = this._distribution(hit.bucket, temperature, rng);
+    } else {
+      dist = this._unigramDist(temperature);
+    }
+    const pick = this._weightedPick(dist, rng);
+    return {word: pick.word, prob: pick.prob, dist};
+  }
+
+  /* suggest(prefix) -> {text, confidence, confidences, tokens, dists}  */
+  suggest(prefix, opts={}){
+    const {
+      temperature=0.75,
+      steps=14,
+      minTokens=1,
+      maxTokens=14,
+      threshold=0.04,
+      anneal=0.96,
+      seed=1337,
+      rngSeedOffset=0
+    } = opts;
+    const baseTokens = tokenize(prefix);
+    if(!baseTokens.length || !this.trained) return {text:"", confidence:0, confidences:[], tokens:[], prob:0};
+    const seedVal = (typeof seed==='number'? seed : hashSeed(String(seed))) + rngSeedOffset;
+    const rng = mulberry32(seedVal);
+    let cur = [...baseTokens];
+    let out = [];
+    let confs = [];
+    let dists = [];
+    let effectiveTemp = temperature;
+    for(let step=0; step< steps && out.length < maxTokens; step++){
+      // annealed temp: decay each step
+      const annealedTemp = Math.max(0.15, effectiveTemp * Math.pow(anneal, step));
+      const {word, prob, dist} = this.predictNext(cur, annealedTemp, rng);
+      if(prob < threshold){
+        // low confidence stop unless we haven't met minTokens
+        if(out.length >= minTokens) break;
+        // otherwise continue but mark low
+      }
+      // avoid repeating immediate same token loop too much?
+      out.push(word);
+      confs.push(prob);
+      dists.push(dist.slice(0,5)); // top 5 for alt
+      cur.push(word);
+      // stop on sentence boundary if we have minTokens
+      if(['.','!','?'].includes(word) && out.length >= minTokens) break;
+      // early stop if next would be low and we have enough
+      if(out.length >= minTokens && prob < threshold*0.7) break;
+    }
+    // trim to maxTokens/minTokens logic for ghost length - already bounded
+    // detokenize with spacing logic relative to prefix ending char
+    let ghostRaw = detokenize(out);
+    // fix spacing: if prefix ends with space or punctuation, ghost should not need leading space logic; we handle via insertion
+    // For overlay ghost we need to decide if we add a leading space when appending after prefix not ending with space
+    // We'll return both raw and display text (display includes leading space if needed)
+    const needsLeadingSpace = prefix.length>0 && !/\s$/.test(prefix) && ghostRaw && !/^[.!?,;:'")\]]/.test(ghostRaw);
+    const displayText = (needsLeadingSpace ? ' ' : '') + ghostRaw;
+    const confidence = confs.length ? confs.reduce((a,b)=>a+b,0)/confs.length : 0;
+    return {
+      text: ghostRaw, // without leading space for acceptance logic needing space
+      displayText,
+      confidence,
+      confidences: confs,
+      tokens: out,
+      dists,
+      baseTokens
+    };
+  }
+
+  getStats(){
+    return {
+      vocab: this.vocab.size,
+      tokens: this.totalTokens,
+      sentences: this.sentenceCount,
+      maxN: this.maxN,
+      floor: this._FLOOR
+    };
+  }
+}
+
+/* ── APP STATE ─────────────────────────────────────────────── */
+const editor = document.getElementById('editor');
+const ghostLayer = document.getElementById('ghostLayer');
+const editorWrap = document.getElementById('editorWrap');
+const wordCountEl = document.getElementById('wordCount');
+const charCountEl = document.getElementById('charCount');
+const lineCountEl = document.getElementById('lineCount');
+const cursorInfoEl = document.getElementById('cursorInfo');
+const statVocabEl = document.getElementById('statVocab');
+const statTokensEl = document.getElementById('statTokens');
+const statSentEl = document.getElementById('statSent');
+const statWordsEl = document.getElementById('statWords');
+const corpusInput = document.getElementById('corpusInput');
+const corpusCharsEl = document.getElementById('corpusChars');
+const tempEl = document.getElementById('temp');
+const tempValEl = document.getElementById('tempVal');
+const stepsEl = document.getElementById('steps');
+const stepsValEl = document.getElementById('stepsVal');
+const minTokensEl = document.getElementById('minTokens');
+const maxTokensEl = document.getElementById('maxTokens');
+const minTokensValEl = document.getElementById('minTokensVal');
+const maxTokensValEl = document.getElementById('maxTokensVal');
+const seedEl = document.getElementById('seed');
+const maxNEl = document.getElementById('maxN');
+const thrEl = document.getElementById('threshold');
+const thrValEl = document.getElementById('thrVal');
+const annealEl = document.getElementById('anneal');
+const annealValEl = document.getElementById('annealVal');
+const confBadge = document.getElementById('confBadge');
+const confValEl = document.getElementById('confVal');
+const ghostLenEl = document.getElementById('ghostLen');
+const ghostPreviewEl = document.getElementById('ghostPreview');
+const ghostTokensEl = document.getElementById('ghostTokens');
+const avgConfEl = document.getElementById('avgConf');
+const lastConfEl = document.getElementById('lastConf');
+const modelLabelEl = document.getElementById('modelLabel');
+const heatmapEl = document.getElementById('heatmap');
+const showHeatmapEl = document.getElementById('showHeatmap');
+const statusDotEl = document.getElementById('statusDot');
+const statusTextEl = document.getElementById('statusText');
+const statusSubEl = document.getElementById('statusSub');
+const rebuildTimeEl = document.getElementById('rebuildTime');
+const fileInputEl = document.getElementById('fileInput');
+const fileNameEl = document.getElementById('fileName');
+const progressEl = document.getElementById('progress');
+const progressBarEl = document.getElementById('progressBar');
+const altWrapEl = document.getElementById('altWrap');
+const altListEl = document.getElementById('altList');
+const autoTriggerEl = document.getElementById('autoTrigger');
+
+let topology = new CausalTopology(3);
+let currentGhost = null; // {displayText, text, confidence, confidences, tokens}
+let ghostDismissed = false;
+let debounceTimer = null;
+let lastSeedOffset = 0;
+
+/* ── BUILD ─────────────────────────────────────────────────── */
+function setStatus(state, sub){
+  statusTextEl.textContent = state;
+  statusSubEl.textContent = sub || '';
+  statusDotEl.className = 'dot' + (state==='Training' ? ' loading' : '');
+}
+function rebuildTopology(corpus, maxN){
+  setStatus('Training', 'building n-grams 1..'+maxN+'…');
+  progressEl.style.display='block';
+  progressBarEl.style.width='10%';
+  // simulate progress for UX; actual train is sync but we animate
+  requestAnimationFrame(()=>{
+    progressBarEl.style.width='55%';
+    setTimeout(()=>{
+      const t0 = performance.now();
+      topology.rebuild(corpus, maxN);
+      const ms = (performance.now()-t0).toFixed(0);
+      progressBarEl.style.width='100%';
+      setTimeout(()=> progressEl.style.display='none', 400);
+      updateStats();
+      setStatus('Ready', `rebuilt in ${ms}ms · vocab ${topology.vocab.size}`);
+      rebuildTimeEl.textContent = new Date().toLocaleTimeString();
+      corpusCharsEl.textContent = corpus.length.toLocaleString();
+      modelLabelEl.textContent = `causal ${topology.maxN}-gram`;
+      document.getElementById('statModel').textContent = `causal ${topology.maxN}-gram`;
+      lastSeedOffset++;
+      triggerSuggest(true);
+    },180);
+  });
+}
+function updateStats(){
+  const s = topology.getStats();
+  statVocabEl.textContent = s.vocab.toLocaleString();
+  statTokensEl.textContent = s.tokens.toLocaleString();
+  statSentEl.textContent = s.sentences.toLocaleString();
+  statWordsEl.textContent = String(editor.value.trim().split(/\s+/).filter(Boolean).length);
+}
+
+/* Init */
+corpusInput.value = BUILT_IN_CORPUS.slice(0, 6000) + "\n\n… (built-in truncated view — full corpus active. Click Reset to restore full view or Rebuild to apply.)";
+corpusCharsEl.textContent = BUILT_IN_CORPUS.length.toLocaleString();
+rebuildTopology(BUILT_IN_CORPUS, 3);
+updateEditorStats();
+
+// controls bindings
+function syncLabels(){
+  tempValEl.textContent = parseFloat(tempEl.value).toFixed(2);
+  stepsValEl.textContent = stepsEl.value;
+  minTokensValEl.textContent = minTokensEl.value;
+  maxTokensValEl.textContent = maxTokensEl.value;
+  thrValEl.textContent = parseFloat(thrEl.value).toFixed(2);
+  annealValEl.textContent = parseFloat(annealEl.value).toFixed(2);
+  modelLabelEl.textContent = `causal ${maxNEl.value}-gram`;
+}
+[tempEl,stepsEl,minTokensEl,maxTokensEl,thrEl,annealEl,maxNEl].forEach(el=>{
+  el.addEventListener('input', ()=>{
+    syncLabels();
+    // live rebuild only for maxN; others just re-trigger ghost
+    if(el===maxNEl){
+      const v = parseInt(maxNEl.value,10);
+      rebuildTopology(corpusInput.value.length>200 ? corpusInput.value : BUILT_IN_CORPUS, v);
+    } else {
+      if(el===maxTokensEl && parseInt(minTokensEl.value)>parseInt(maxTokensEl.value)){
+        minTokensEl.value = maxTokensEl.value;
+        syncLabels();
+      }
+      if(el===minTokensEl && parseInt(minTokensEl.value)>parseInt(maxTokensEl.value)){
+        maxTokensEl.value = minTokensEl.value;
+        syncLabels();
+      }
+      triggerSuggest(true);
+    }
+  });
+});
+seedEl.addEventListener('input', ()=> triggerSuggest(true));
+autoTriggerEl.addEventListener('change', ()=> { if(autoTriggerEl.checked) triggerSuggest(true); else clearGhost(); });
+showHeatmapEl.addEventListener('change', ()=> renderHeatmap());
+syncLabels();
+
+/* ── EDITOR STATS + GHOST RENDER ────────────────────────────── */
+function updateEditorStats(){
+  const text = editor.value;
+  const words = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  wordCountEl.textContent = words.toLocaleString();
+  charCountEl.textContent = text.length.toLocaleString();
+  lineCountEl.textContent = text.split('\n').length.toLocaleString();
+  // cursor
+  const pos = editor.selectionStart;
+  const before = text.slice(0,pos);
+  const lines = before.split('\n');
+  const ln = lines.length;
+  const col = lines[lines.length-1].length + 1;
+  cursorInfoEl.textContent = `Ln ${ln}, Col ${col} · ${words} words`;
+  statWordsEl.textContent = String(words);
+}
+
+function renderGhostLayer(){
+  const text = editor.value;
+  const pos = editor.selectionStart;
+  // if no ghost or dismissed, just show before/after transparent
+  if(!currentGhost || !currentGhost.displayText || ghostDismissed){
+    const before = escapeHtml(text.slice(0,pos));
+    const after = escapeHtml(text.slice(pos));
+    // transparent typed pushes ghost position, but no ghost suffix
+    ghostLayer.innerHTML = `<span class="ghost-typed">${before.replace(/\n/g,'<br>')}</span><span class="ghost-typed">${after.replace(/\n/g,'<br>')}</span>`;
+    ghostLenEl.textContent = '0 chars ghost';
+    ghostPreviewEl.textContent = '—';
+    ghostTokensEl.textContent = '0';
+    confBadge.className='conf-badge';
+    confValEl.textContent='—';
+    heatmapEl.innerHTML='';
+    altWrapEl.classList.add('hidden');
+    return;
+  }
+  const ghost = currentGhost.displayText;
+  const before = text.slice(0,pos);
+  const after = text.slice(pos);
+  // Escape and preserve newlines
+  const escBefore = escapeHtml(before);
+  const escGhost = escapeHtml(ghost);
+  const escAfter = escapeHtml(after);
+  // Build HTML: before transparent, ghost italic dim, after transparent
+  // Need to keep same white-space wrapping: replace \n with <br> plus preserve spaces? white-space:pre-wrap handles, but for innerHTML we convert \n to <br> for alignment; alternative use <span> with pre-wrap works without <br> if we keep \n as actual newline char in HTML? Simpler: use textContent style but we need HTML spans, so convert \n to <br>
+  function toHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') // then \n
+  }
+  // Instead reuse escapeHtml then replace \n and spaces?
+  const htmlBefore = escBefore.replace(/\n/g,'<br>');
+  const htmlGhost = `<span class="ghost">${escGhost.replace(/\n/g,'<br>')}</span>`;
+  const htmlAfter = escAfter.replace(/\n/g,'<br>');
+  ghostLayer.innerHTML = `<span class="ghost-typed">${htmlBefore}</span>${htmlGhost}<span class="ghost-typed">${htmlAfter}</span>`;
+
+  // meta
+  ghostLenEl.textContent = `${ghost.length} chars ghost · ${currentGhost.tokens.length} tok`;
+  ghostPreviewEl.textContent = ghost.slice(0,80) + (ghost.length>80?'…':'');
+  ghostTokensEl.textContent = String(currentGhost.tokens.length);
+  const avg = currentGhost.confidence;
+  confValEl.textContent = (avg*100).toFixed(1)+'%';
+  avgConfEl.textContent = (avg*100).toFixed(1)+'%';
+  lastConfEl.textContent = currentGhost.confidences.length ? (currentGhost.confidences[currentGhost.confidences.length-1]*100).toFixed(1)+'%' : '—';
+  // badge color
+  if(avg>=0.35) confBadge.className='conf-badge';
+  else if(avg>=0.15) confBadge.className='conf-badge mid';
+  else confBadge.className='conf-badge low';
+
+  renderHeatmap();
+  renderAlts();
+}
+function renderHeatmap(){
+  if(!showHeatmapEl.checked || !currentGhost || ghostDismissed){
+    heatmapEl.innerHTML='';
+    return;
+  }
+  const cs = currentGhost.confidences;
+  heatmapEl.innerHTML='';
+  cs.forEach(c=>{
+    const i = document.createElement('i');
+    let bg, br;
+    if(c>=0.35){ bg='#1e4a33'; br='#00d084'; }
+    else if(c>=0.15){ bg='#4a3d1e'; br='#ffb020'; }
+    else { bg='#4a1e1e'; br='#ff4d6a'; }
+    i.style.background = bg;
+    i.style.borderColor = br;
+    i.style.opacity = String(0.6 + c*0.9);
+    i.title = `token prob ${(c*100).toFixed(1)}%`;
+    heatmapEl.appendChild(i);
+  });
+}
+function renderAlts(){
+  if(!currentGhost || !currentGhost.dists || !currentGhost.dists.length){
+    altWrapEl.classList.add('hidden'); return;
+  }
+  // show alternative top candidates for first token
+  const top = currentGhost.dists[0] || [];
+  if(top.length<=1){ altWrapEl.classList.add('hidden'); return; }
+  altWrapEl.classList.remove('hidden');
+  altListEl.innerHTML='';
+  top.slice(0,5).forEach((cand, idx)=>{
+    const chip = document.createElement('button');
+    chip.className='alt-chip';
+    chip.type='button';
+    chip.innerHTML = `<b>${escapeHtml(cand.word)}</b> ${(cand.prob*100).toFixed(1)}%`;
+    chip.title='Click to insert this word';
+    chip.addEventListener('click', ()=>{
+      // replace first ghost token with this alternative?
+      insertGhostWord(cand.word);
+    });
+    altListEl.appendChild(chip);
+  });
+}
+function insertGhostWord(word){
+  if(!currentGhost) return;
+  // Insert just the word (not full ghost) - as partial accept alternative
+  const pos = editor.selectionStart;
+  const prefixEndsWithSpace = /\s$/.test(editor.value.slice(0,pos));
+  const needsSpace = !prefixEndsWithSpace && !/^[.!?,;:'")\]]/.test(word);
+  const insert = (needsSpace?' ':'')+word+' ';
+  document.execCommand ? document.execCommand('insertText', false, insert) : insertAtCursor(insert);
+  // fallback if execCommand not
+  if(editor.value.slice(pos, pos+insert.length)!==insert){
+    insertAtCursor(insert);
+  }
+  ghostDismissed=false;
+  triggerSuggest(true);
+}
+function insertAtCursor(text){
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const val = editor.value;
+  editor.value = val.slice(0,start) + text + val.slice(end);
+  editor.selectionStart = editor.selectionEnd = start + text.length;
+  editor.focus();
+  syncScroll();
+  updateEditorStats();
+}
+function syncScroll(){
+  ghostLayer.scrollTop = editor.scrollTop;
+  ghostLayer.scrollLeft = editor.scrollLeft;
+}
+editor.addEventListener('scroll', syncScroll);
+window.addEventListener('resize', syncScroll);
+
+/* ── SUGGEST TRIGGER ────────────────────────────────────────── */
+function getOpts(){
+  return {
+    temperature: parseFloat(tempEl.value),
+    steps: parseInt(stepsEl.value,10),
+    minTokens: parseInt(minTokensEl.value,10),
+    maxTokens: parseInt(maxTokensEl.value,10),
+    threshold: parseFloat(thrEl.value),
+    anneal: parseFloat(annealEl.value),
+    seed: parseInt(seedEl.value,10) || 1337,
+    rngSeedOffset: lastSeedOffset
+  };
+}
+function triggerSuggest(immediate=false){
+  if(!autoTriggerEl.checked && !immediate) return;
+  // respect dismissed flag? allow immediate trigger to resurrect
+  if(ghostDismissed && !immediate) return;
+  if(immediate) ghostDismissed=false;
+  const prefix = editor.value.slice(0, editor.selectionStart);
+  // don't trigger on very short prefix? allow 1 token min
+  const tokens = tokenize(prefix);
+  if(tokens.length===0){
+    clearGhost();
+    return;
+  }
+  const opts = getOpts();
+  // enforce min/max consistency
+  opts.maxTokens = Math.min(opts.steps, opts.maxTokens);
+  // ensure min <= max
+  if(opts.minTokens > opts.maxTokens) opts.minTokens = opts.maxTokens;
+  const res = topology.suggest(prefix, opts);
+  if(!res.text || res.confidence < opts.threshold && res.tokens.length < opts.minTokens){
+    // if confidence too low, optionally still show but dimmer? Spec says threshold hides.
+    // We'll hide if avg confidence < threshold and not enough tokens
+    if(res.confidence < opts.threshold){
+      clearGhost();
+      return;
+    }
+  }
+  // if result is empty due to no tokens, clear
+  if(!res.tokens.length){
+    clearGhost(); return;
+  }
+  currentGhost = res;
+  renderGhostLayer();
+}
+function clearGhost(){
+  currentGhost=null;
+  renderGhostLayer();
+}
+function debouncedTrigger(){
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(()=> triggerSuggest(false), 180);
+}
+
+/* ── EDITOR EVENTS ──────────────────────────────────────────── */
+editor.addEventListener('input', ()=>{
+  updateEditorStats();
+  syncScroll();
+  // reset dismissed on typing
+  ghostDismissed=false;
+  if(autoTriggerEl.checked) debouncedTrigger();
+  else clearGhost();
+  // live stats
+  renderGhostLayer(); // need to reposition ghost-typed immediately
+});
+editor.addEventListener('keyup', (e)=>{
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){
+    updateEditorStats();
+    syncScroll();
+    triggerSuggest(true);
+  }
+});
+editor.addEventListener('click', ()=>{
+  updateEditorStats();
+  triggerSuggest(true);
+});
+editor.addEventListener('select', ()=>{
+  updateEditorStats();
+});
+editor.addEventListener('keydown', (e)=>{
+  // Tab accepts full ghost, Shift+Tab? spec says Tab accepts full ghost
+  // We'll implement Tab = accept full ghost, Ctrl+Right = accept one word, Esc dismiss
+  if(e.key==='Tab' && currentGhost && !ghostDismissed){
+    e.preventDefault();
+    acceptGhost('full');
+    return;
+  }
+  if(e.key==='Escape'){
+    if(currentGhost){
+      e.preventDefault();
+      ghostDismissed=true;
+      clearGhost();
+    }
+    return;
+  }
+  if((e.ctrlKey || e.metaKey) && e.code==='Space'){
+    e.preventDefault();
+    ghostDismissed=false;
+    triggerSuggest(true);
+    return;
+  }
+  if(e.key==='ArrowRight' && (e.ctrlKey || e.metaKey) && currentGhost && !ghostDismissed){
+    e.preventDefault();
+    acceptGhost('word');
+    return;
+  }
+  // On any typing that would modify content, we already handle via input
+  if(e.key.length===1 && !e.ctrlKey && !e.metaKey){
+    // allow default but will trigger debounced after input
+  }
+  // Ctrl+K clear
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){
+    e.preventDefault();
+    document.getElementById('btnClearEditor').click();
+  }
+});
+
+function acceptGhost(mode='full'){
+  if(!currentGhost || ghostDismissed) return;
+  const pos = editor.selectionStart;
+  const before = editor.value.slice(0,pos);
+  const after = editor.value.slice(editor.selectionEnd);
+  let toInsert = '';
+  if(mode==='full'){
+    toInsert = currentGhost.displayText;
+  } else if(mode==='word'){
+    // accept one word (first token)
+    const first = currentGhost.tokens[0] || '';
+    // Respect spacing / punctuation logic
+    const needsSpace = before.length>0 && !/\s$/.test(before) && !/^[.!?,;:'")\]]/.test(first);
+    const suffix = first + (currentGhost.tokens.length>1 ? ' ' : ' ');
+    toInsert = (needsSpace?' ':'') + suffix;
+    // For word mode, we want to keep remaining ghost? We'll re-trigger after
+  }
+  // Insert
+  editor.value = before + toInsert + after;
+  const newPos = before.length + toInsert.length;
+  editor.selectionStart = editor.selectionEnd = newPos;
+  editor.focus();
+  updateEditorStats();
+  syncScroll();
+  // After full accept, trigger next suggestion
+  ghostDismissed=false;
+  // small delay to trigger next
+  setTimeout(()=> triggerSuggest(true), 30);
+}
+
+/* ── BUTTONS ────────────────────────────────────────────────── */
+document.getElementById('btnTrigger').addEventListener('click', ()=>{ghostDismissed=false; triggerSuggest(true);});
+document.getElementById('btnDismiss').addEventListener('click', ()=>{ghostDismissed=true; clearGhost(); editor.focus();});
+document.getElementById('btnAccept').addEventListener('click', ()=> acceptGhost('full'));
+document.getElementById('btnClearEditor').addEventListener('click', ()=>{
+  editor.value='';
+  clearGhost();
+  updateEditorStats();
+  syncScroll();
+  editor.focus();
+});
+document.getElementById('btnCopy').addEventListener('click', async ()=>{
+  try{ await navigator.clipboard.writeText(editor.value); setStatus('Ready','copied to clipboard'); setTimeout(()=>setStatus('Ready','—'),1500);}catch{
+    editor.select(); document.execCommand('copy');
+  }
+});
+document.getElementById('btnFocus').addEventListener('click', ()=> editor.focus());
+
+/* Corpus controls */
+document.getElementById('btnResetCorpus').addEventListener('click', ()=>{
+  corpusInput.value = BUILT_IN_CORPUS.slice(0,6000) + "\n\n… (reset view — full corpus active until rebuild)";
+  fileNameEl.textContent='—';
+  fileInputEl.value='';
+});
+document.getElementById('btnRebuild').addEventListener('click', ()=>{
+  const corpus = corpusInput.value.trim().length>50 ? corpusInput.value : BUILT_IN_CORPUS;
+  const maxN = parseInt(maxNEl.value,10);
+  rebuildTopology(corpus, maxN);
+});
+document.getElementById('btnUseSelection').addEventListener('click', ()=>{
+  const sel = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+  if(sel.trim().length<10){ setStatus('Ready','select ≥10 chars first'); return; }
+  corpusInput.value = sel;
+  rebuildTopology(sel, parseInt(maxNEl.value,10));
+});
+document.getElementById('btnUseEditor').addEventListener('click', ()=>{
+  const text = editor.value;
+  if(text.trim().length<20){ setStatus('Ready','editor too short'); return; }
+  corpusInput.value = text;
+  rebuildTopology(text, parseInt(maxNEl.value,10));
+});
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  const blob = new Blob([corpusInput.value.length>50 ? corpusInput.value : BUILT_IN_CORPUS], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='corpus.txt'; a.click();
+  URL.revokeObjectURL(url);
+});
+fileInputEl.addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  fileNameEl.textContent = `${f.name} · ${(f.size/1024).toFixed(1)} KB`;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    corpusInput.value = ev.target.result.slice(0, 200000); // cap
+    rebuildTopology(corpusInput.value, parseInt(maxNEl.value,10));
+  };
+  reader.readAsText(f);
+});
+
+/* ── INITIAL RENDER ─────────────────────────────────────────── */
+requestAnimationFrame(()=>{
+  syncScroll();
+  renderGhostLayer();
+  updateEditorStats();
+  // trigger initial ghost after boot
+  setTimeout(()=> triggerSuggest(true), 300);
+});
+/* Sync corpus hint */
+new ResizeObserver(syncScroll).observe(editorWrap);
+
+/* ── ACCESSIBILITY: ensure Tab accept works when no ghost: allow default */
+</script>
+</body>
+</html>

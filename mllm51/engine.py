@@ -162,3 +162,66 @@ class DiscreteDiffusionEngine:
 
         logger.debug("denoise finished: %d tokens in %d steps", target_len, steps)
         return DenoiseResult(sequence=seq, confidences=confidences)
+
+    # -------------------------------------------------------- autocomplete (causal)
+    def _causal_contexts(self, seq: Sequence[str], idx: int):
+        for n in range(1, self.topo.max_n + 1):
+            if idx >= n:
+                ctx = tuple(seq[idx - n: idx])
+                if MASK not in ctx:
+                    yield "left", n, ctx
+
+    def causal_distribution(self, seq: Sequence[str], idx: int) -> dict[str, float]:
+        """Left-only distribution for autocomplete."""
+        base = 0.0
+        contrib: dict[str, float] = {}
+        for _, n, ctx in self._causal_contexts(seq, idx):
+            counts = self.topo.left_counts[n].get(ctx)
+            total = self.topo.left_totals[n].get(ctx, 0)
+            if not counts or total <= 0:
+                continue
+            base += math.log(_FLOOR) * n
+            floor_adj = math.log(_FLOOR) * n
+            for word, count in counts.items():
+                contrib[word] = contrib.get(word, 0.0) + (
+                    math.log(count / total + _FLOOR) * n - floor_adj
+                )
+        candidates = sorted(set(contrib) | set(self._backoff))
+        energies = {
+            w: math.log(self.topo.unigrams.get(w, 1) + 1) * _UNIGRAM_WEIGHT + base + contrib.get(w, 0.0)
+            for w in candidates
+        }
+        max_e = max(energies.values())
+        exps = {w: math.exp(e - max_e) for w, e in energies.items()}
+        total = sum(exps.values())
+        return {w: e / total for w, e in exps.items()}
+
+    def complete(self, prefix: Sequence[str], max_tokens: int = 12, temperature: float = 0.35, threshold: float = 0.0):
+        """Left-to-right autocomplete continuation."""
+        seq = [w.lower() for w in prefix]
+        confidences: list[float] = []
+        continuation: list[str] = []
+        for _ in range(max_tokens):
+            idx = len(seq)
+            probs = self.causal_distribution(seq, idx)
+            if not probs:
+                break
+            if temperature <= 0:
+                chosen = max(probs, key=probs.get)
+                conf = probs[chosen]
+            else:
+                words = list(probs)
+                weights = [p ** (1.0 / max(temperature, 1e-6)) for p in probs.values()]
+                chosen = self.rng.choices(words, weights=weights, k=1)[0]
+                conf = probs[chosen]
+            if conf < threshold:
+                break
+            seq.append(chosen)
+            continuation.append(chosen)
+            confidences.append(conf)
+            if chosen in {".", "!", "?"} and len(continuation) >= 4:
+                break
+        return type("CompleteResult", (), {"prefix": list(prefix), "continuation": continuation, "confidences": confidences, "full_sequence": seq})()
+
+    def autocomplete(self, prefix: Sequence[str], max_tokens: int = 12, temperature: float = 0.35, threshold: float = 0.0):
+        return self.complete(prefix, max_tokens, temperature, threshold)

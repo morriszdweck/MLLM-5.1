@@ -1,26 +1,24 @@
 # MLLM-5.1
 
-**Discrete Diffusion Micro Language Model — sculpt text from noise.**
+**Document Autocomplete Micro Language Model — ghost-text for your editor.**
 
-MLLM-5.1 trades a bit of quality for speed. Its diffusion architecture looks
-**both forward and backward** when predicting tokens and **re-masks low-confidence
-fills** to fix its own mistakes. More steps = more refinement — the **effort knob**.
+MLLM-5.1 is a tiny, causal n-gram model that **continues your document** left-to-right. Type a prefix, get a dim ghost suggestion, `Tab` to accept — like Copilot for prose. No server, no install, just `python MLLM-5.1.py` or the browser playground.
 
-> **Single-file, zero-dependency.** `python MLLM-5.1.py` is the whole model.
+> **Single-file, zero-dependency.** `python MLLM-5.1.py` is the whole model. `index.html` is the whole playground.
 
 ```
- ███╗   ███╗██╗     ██╗     ███╗   ███╗      ███████╗        ██╗
- ████╗ ████║██║     ██║     ████╗ ████║      ██╔════╝        ██║
- ██╔████╔██║██║     ██║     ██╔████╔██║█████╗███████╗        ██║
- ██║╚██╔╝██║██║     ██║     ██║╚██╔╝██║╚════╝╚════██║        ██║
- ██║ ╚═╝ ██║███████╗███████╗██║ ╚═╝ ██║      ███████║██╗     ██║
- ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝      ╚══════╝╚═╝     ╚═╝
-        Discrete Diffusion · Bidirectional · Sculpt-from-Noise
+ ███╗   ███╗██╗     ██╗     ███╗   ███╗      ███████╗   ██╗  ██╗
+ ████╗ ████║██║     ██║     ████╗ ████║      ██╔════╝   ██║  ██║
+ ██╔████╔██║██║     ██║     ██╔████╔██║█████╗███████╗   ███████║
+ ██║╚██╔╝██║██║     ██║     ██║╚██╔╝██║╚════╝╚════██║   ╚════██║
+ ██║ ╚═╝ ██║███████╗███████╗██║ ╚═╝ ██║      ███████║██╗██║  ██║
+ ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝      ╚══════╝╚═╝╚═╝  ╚═╝
+        Autocomplete · Causal · Ghost-Text · Document Editor
 ```
 
-This repository contains **MLLM-5.1 (Preview-36P rebuilt)** — renewed from scratch as a self-contained Python file.
+**Live playground:** https://mllm-5-1.netlify.app — also `https://mllm-5-synapse.netlify.app` — open `index.html` locally via `file://`.
 
-## Quick start
+## Quick start — Python
 
 Requires **Python 3.10+**, no pip, no venv.
 
@@ -28,94 +26,108 @@ Requires **Python 3.10+**, no pip, no venv.
 git clone https://github.com/morriszdweck/MLLM-5.1.git
 cd MLLM-5.1
 
-# chat (default)
-python MLLM-5.1.py
-python MLLM-5.1.py chat --steps 30 --seed 42
+# one-shot autocomplete
+python MLLM-5.1.py autocomplete "what is an atom" --steps 12 --seed 42
+python MLLM-5.1.py autocomplete "the quick brown" --temperature 0.3 --threshold 0.15
 
-# one-shot
-python MLLM-5.1.py generate "what is an atom" --steps 30 --seed 42
-python MLLM-5.1.py generate "hello world" --show-steps --extra-tokens 8 14
+# aliases (generate is autocomplete, chat is REPL)
+python MLLM-5.1.py generate "hello world" --steps 16
+python MLLM-5.1.py chat --steps 16 --seed 7
+
+# interactive autocomplete REPL (ghost + heatmap)
+python MLLM-5.1.py
+python MLLM-5.1.py chat
+# inside REPL: type prefix → shows ghost continuation
+# :help, :clear, :steps N, :temp N, :seed N
 ```
 
-Also works as an installed CLI if you prefer:
+Also installable if you prefer:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
-mllm51 generate "what is an atom" --steps 30 --seed 42
-mllm51 chat
-# or without install
-python -m mllm51 generate "hello" --steps 20
+mllm51 autocomplete "the quick brown" --steps 12
+mllm51 generate "hello" --temperature 0.2
+python -m mllm51 chat
 ```
 
-On macOS Homebrew Python, `pip install` without a venv is blocked (PEP 668) — use a venv above or `pipx install git+https://github.com/morriszdweck/MLLM-5.1.git`.
+On Homebrew Python, use a venv (PEP 668) or `pipx install git+https://github.com/morriszdweck/MLLM-5.1.git`.
+
+## Quick start — HTML Playground
+
+```bash
+open index.html              # local, offline, no server
+# or visit the deployed URL
+open https://mllm-5-1.netlify.app
+```
+
+Editor features:
+
+- **Ghost text** overlay (textarea + dim `#9aa0b6` ghost behind, sync scroll)
+- **Tab** accept full ghost, **Ctrl+→** accept word, **Esc** dismiss, **Ctrl+Space** trigger
+- **Controls:** Temperature (0.2–1.2), Steps/Length (5–40), Seed, Max n-gram (2–5), Threshold, Anneal, Auto-trigger 180ms debounce
+- **Stats:** vocab/tokens/sentences, confidence heatmap (green>0.35 yellow>0.15 red), top-5 alternatives, word/char count
+- **Corpus:** paste or upload `.txt`, Rebuild (causal 1..3), Reset, Export
+
+Self-contained — all CSS/JS inline, no fetch, no npm, no build.
 
 ## Flags
 
-| Flag | Description |
-|---|---|
-| `--steps N` | Diffusion steps — the **effort knob** (default `30`). Higher = more refinement. |
-| `--extra-tokens MIN MAX` | Tokens to generate beyond the prompt (default `10 18`). |
-| `--seed N` | Deterministic sampling. Works before or after the subcommand. |
-| `--corpus PATH` | Train on your own text file (default: embedded built-in corpus). |
-| `--show-steps` | Visualize intermediate diffusion states. |
-| `--no-color` | Disable ANSI colors (auto-disabled when piping or `NO_COLOR=1`). |
-| `-v` | Debug logging. |
-| `--version` | Print version. |
-
-Chat extras (inside the REPL):
-
-```
-[quit] / quit / exit / :q   — leave
-:help                       — help
-:clear                      — clear screen
-:steps N                    — change effort live
-:seed N  / :seed none       — change seed live
-:show on|off                — toggle step visualization
-```
+| Flag | Default | Description |
+|---|---|---|
+| `--steps N` | `16` | Max tokens to generate (effort knob) |
+| `--extra-tokens MIN MAX` | `steps..steps` | Range beyond prefix (alias) |
+| `--temperature T` | `0.35` | `0.0` greedy → `1.2` creative |
+| `--threshold T` | `0.0` | Min confidence to emit |
+| `--max-ngram N` | `3` | Causal context size (1–5) |
+| `--seed N` | random | Deterministic sampling (sorted candidates → cross-process reproducible) |
+| `--corpus PATH` | embedded | Train on your own text |
+| `--show-steps` | off | Show diffusion steps (legacy `generate`) |
+| `--no-color` | auto | Disable ANSI (or `NO_COLOR=1`) |
+| `-v` | off | Debug logging |
 
 ## How it works
 
-1. **Topology building** (`BidirectionalTopology`). The corpus is tokenized (`\b[a-zA-Z0-9']+\b|[.!?]`) and counted into left/right n-gram tables for distances **1–3**. Counts and totals are cached; sentences never bleed across boundaries. (`topology` section in `MLLM-5.1.py`).
+1. **Topology.** Tokenize `\b[a-zA-Z0-9']+\b|[.!?]` lowercased, sentence-split `(?<=[.!?])\s+`. Build **causal** left counts `left_counts[n][ctx][word]` for `n=1..3` (right side kept for legacy diffusion). `mllm51/topology.py` / `MLLM-5.1.py`.
 
-2. **Discrete diffusion** (`DiscreteDiffusionEngine`). Generation starts fully masked (`[MASK] * target_len`, prompt tokens locked at the front). Each step:
-   - score every `[MASK]` against its bidirectional contexts (log-prob weighted by `n`, plus unigram prior),
-   - sample under **annealed temperature** `1.2*(1 - t/steps)+0.2` (hot → cold),
-   - re-mask the least-confident `1 - t/steps` fraction — sculpting text from noise.
+2. **Autocomplete.** Given prefix tokens `w_{<t}`, score each candidate continuation by `log(count/total+FLOOR)*n + log(unigram+1)*0.1`, softmax → probs, sample `p^(1/T)` with `random.Random(seed)`. Candidates = `sorted(observed ∪ top50)` so `PYTHONHASHSEED`-independent. Threshold gates low-confidence ghosts.
 
-3. **Rendering**. Progress bar + per-token confidence heatmap (green/yellow/red) and detokenized text.
-
-Deterministic with `--seed` — candidate ordering is sorted so results reproduce **across processes** (`PYTHONHASHSEED`-independent).
-
-## Examples
-
-```bash
-# reproducible atom answer
-python MLLM-5.1.py --seed 42 generate "what is an atom" --steps 15
-
-# watch it denoise
-python MLLM-5.1.py --seed 7 generate "the cat" --steps 12 --show-steps
-
-# custom corpus
-python MLLM-5.1.py --corpus ./my.txt --seed 1 generate "hello"
-
-# effort trade-off
-python MLLM-5.1.py generate "explain diffusion" --steps 10
-python MLLM-5.1.py generate "explain diffusion" --steps 40  # slower, sharper
-```
+3. **Diffusion heritage.** `denoise()` still available for `generate --show-steps`: start `[MASK]*len`, annealed `1.2*(1-t/steps)+0.2`, re-mask lowest `1-t/steps`. Autocomplete is left-to-right specialization of the same topology.
 
 ## Project layout
 
 ```
-MLLM-5.1.py        ← self-contained model (just run it)
-mllm51/            ← installable package (re-exports same logic)
+MLLM-5.1.py        ← self-contained autocomplete runner (run it)
+index.html         ← self-contained playground (ghost-text editor) — also playground.html
+mllm51/            ← installable package (same engine, causal + diffusion)
   topology.py        n-gram topology
-  engine.py          diffusion engine (sorted candidates → deterministic)
-  cli.py             CLI (generate / chat)
-  terminal.py        ANSI colors with NO_COLOR/tty detection
-data/corpus.txt    ← source for the embedded corpus (also inside MLLM-5.1.py)
-tests/             ← pytest suite (29 tests)
-pyproject.toml     ← pip metadata
+  engine.py          DiscreteDiffusionEngine + causal complete()
+  cli.py             CLI (autocomplete/generate/chat)
+  terminal.py        ANSI Term
+data/corpus.txt    ← source for BUILT_IN_CORPUS
+tests/             ← 29 pytest
+netlify.toml       ← static deploy config
+```
+
+## Deploy
+
+Static — no build. Published on Netlify:
+
+- **Prod:** https://mllm-5-1.netlify.app
+- **Mirror:** https://mllm-5-synapse.netlify.app
+
+Redeploy:
+
+```bash
+npx netlify deploy --prod --dir=. --site mllm-5-1  # or --site mllm-5-synapse
+# or link first: npx netlify link --id <siteId>
+```
+
+`netlify.toml`:
+```toml
+[build]
+  publish = "."
+  command = "echo 'no build - static deploy'"
 ```
 
 ## Development
@@ -124,18 +136,13 @@ pyproject.toml     ← pip metadata
 python -m venv .venv && source .venv/bin/activate
 pip install -e . pytest
 pytest -v
+python MLLM-5.1.py --seed 42 autocomplete "hello" --steps 8 --temperature 0.2
 ```
 
-## Roadmap
+## Models
 
-- [x] Effort control (`--steps`)
-- [x] Single-file self-contained runner
-- [x] Cross-process deterministic sampling
-- [ ] Playground
-- [ ] Studio
-
-Planned models: Tasmania 1072P · Meridian 200P · Fjord 50P · Mesa 10P  
-Current: **MLLM-5.1 Preview-36P (rebuilt v5.1.1)** — the preview model.
+- **MLLM-5.1** — 5.1 final (autocomplete, causal). No longer preview.
+- Future: Tasmania 1072P · Meridian 200P · Fjord 50P · Mesa 10P (placeholders)
 
 ---
-*Core principles preserved: bidirectional context, iterative denoising, confidence-guided remasking, sculpt-from-noise.*
+*Core principles preserved: causal n-gram topology, autocomplete ghost-text, confidence-gated, deterministic.*
