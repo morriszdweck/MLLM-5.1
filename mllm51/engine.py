@@ -86,7 +86,7 @@ class DiscreteDiffusionEngine:
                     math.log(count / total + _FLOOR) * n - floor_adj
                 )
 
-        candidates = set(contrib) | set(self._backoff)
+        candidates = sorted(set(contrib) | set(self._backoff))
         energies = {
             w: math.log(self.topo.unigrams.get(w, 1) + 1) * _UNIGRAM_WEIGHT
             + base

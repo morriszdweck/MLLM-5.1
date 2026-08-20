@@ -1,103 +1,141 @@
 # MLLM-5.1
 
-**BETA** — the diffusion version of MLLM with a new architecture.
+**Discrete Diffusion Micro Language Model — sculpt text from noise.**
 
-MLLM-5.1 is designed to be more efficient than MLLM-5, trading a bit of
-quality for speed. Its diffusion architecture lets the model look both
-forward and backward when predicting tokens, and re-mask low-confidence
-tokens to fix its own errors.
+MLLM-5.1 trades a bit of quality for speed. Its diffusion architecture looks
+**both forward and backward** when predicting tokens and **re-masks low-confidence
+fills** to fix its own mistakes. More steps = more refinement — the **effort knob**.
 
-This repository contains **MLLM-5.1 Preview-36P**, the current preview model.
+> **Single-file, zero-dependency.** `python MLLM-5.1.py` is the whole model.
 
-## Installation
+```
+ ███╗   ███╗██╗     ██╗     ███╗   ███╗      ███████╗   ██╗  ██╗
+ ████╗ ████║██║     ██║     ████╗ ████║      ██╔════╝   ██║  ██║
+ ██╔████╔██║██║     ██║     ██╔████╔██║█████╗███████╗   ███████║
+ ██║╚██╔╝██║██║     ██║     ██║╚██╔╝██║╚════╝╚════██║   ╚════██║
+ ██║ ╚═╝ ██║███████╗███████╗██║ ╚═╝ ██║      ███████║██╗██║  ██║
+ ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝     ╚═╝      ╚══════╝╚═╝╚═╝  ╚═╝
+        Discrete Diffusion · Bidirectional · Sculpt-from-Noise
+```
 
-Requires Python 3.10+.
+This repository contains **MLLM-5.1 (Preview-36P rebuilt)** — renewed from scratch as a self-contained Python file.
+
+## Quick start
+
+Requires **Python 3.10+**, no pip, no venv.
 
 ```bash
 git clone https://github.com/morriszdweck/MLLM-5.1.git
 cd MLLM-5.1
 
-python3 -m venv .venv
-source .venv/bin/activate
+# chat (default)
+python MLLM-5.1.py
+python MLLM-5.1.py chat --steps 30 --seed 42
+
+# one-shot
+python MLLM-5.1.py generate "what is an atom" --steps 30 --seed 42
+python MLLM-5.1.py generate "hello world" --show-steps --extra-tokens 8 14
+```
+
+Also works as an installed CLI if you prefer:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
-```
-
-On macOS with Homebrew Python (and other PEP 668 systems), plain
-`pip install` is blocked with an `externally-managed-environment` error —
-the virtual environment above is the fix. Alternatively, install the CLI
-isolated with [pipx](https://pipx.pypa.io/):
-
-```bash
-pipx install git+https://github.com/morriszdweck/MLLM-5.1.git
-```
-
-(Everything also works without installing: run `python -m mllm51` from the
-repository root.)
-
-## Usage
-
-Interactive chat:
-
-```bash
-mllm51 chat
-# or simply
-mllm51
-```
-
-One-shot generation:
-
-```bash
 mllm51 generate "what is an atom" --steps 30 --seed 42
+mllm51 chat
+# or without install
+python -m mllm51 generate "hello" --steps 20
 ```
 
-Useful flags:
+On macOS Homebrew Python, `pip install` without a venv is blocked (PEP 668) — use a venv above or `pipx install git+https://github.com/morriszdweck/MLLM-5.1.git`.
+
+## Flags
 
 | Flag | Description |
-| --- | --- |
-| `--steps N` | Number of diffusion steps — the **effort** knob. More steps = more refinement. |
-| `--extra-tokens MIN MAX` | How many tokens to generate beyond the prompt (default `10 18`). |
-| `--seed N` | Reproducible output. |
-| `--corpus PATH` | Train on your own text file instead of the bundled corpus (`data/corpus.txt`). |
-| `--show-steps` | Render intermediate diffusion states (one-shot mode). |
-| `--no-color` | Disable ANSI colors (auto-disabled when piping). |
+|---|---|
+| `--steps N` | Diffusion steps — the **effort knob** (default `30`). Higher = more refinement. |
+| `--extra-tokens MIN MAX` | Tokens to generate beyond the prompt (default `10 18`). |
+| `--seed N` | Deterministic sampling. Works before or after the subcommand. |
+| `--corpus PATH` | Train on your own text file (default: embedded built-in corpus). |
+| `--show-steps` | Visualize intermediate diffusion states. |
+| `--no-color` | Disable ANSI colors (auto-disabled when piping or `NO_COLOR=1`). |
 | `-v` | Debug logging. |
+| `--version` | Print version. |
+
+Chat extras (inside the REPL):
+
+```
+[quit] / quit / exit / :q   — leave
+:help                       — help
+:clear                      — clear screen
+:steps N                    — change effort live
+:seed N  / :seed none       — change seed live
+:show on|off                — toggle step visualization
+```
 
 ## How it works
 
-1. **Training (topology building).** The corpus is tokenized and counted
-   into a *bidirectional n-gram topology*: for every word, which words
-   appear to its left and right at distances 1–3
-   (`mllm51/topology.py`).
-2. **Generation (discrete diffusion).** The output starts as a row of
-   `[MASK]` tokens. Each step, every masked position is scored against its
-   bidirectional contexts, a word is sampled under an annealed temperature,
-   and the least-confident fills are re-masked for another pass — text is
-   sculpted out of noise (`mllm51/engine.py`).
-3. **Rendering.** The CLI shows the denoising progress, the final sculpted
-   text, and a per-token confidence heatmap (`mllm51/cli.py`).
+1. **Topology building** (`BidirectionalTopology`). The corpus is tokenized (`\b[a-zA-Z0-9']+\b|[.!?]`) and counted into left/right n-gram tables for distances **1–3**. Counts and totals are cached; sentences never bleed across boundaries. (`topology` section in `MLLM-5.1.py`).
+
+2. **Discrete diffusion** (`DiscreteDiffusionEngine`). Generation starts fully masked (`[MASK] * target_len`, prompt tokens locked at the front). Each step:
+   - score every `[MASK]` against its bidirectional contexts (log-prob weighted by `n`, plus unigram prior),
+   - sample under **annealed temperature** `1.2*(1 - t/steps)+0.2` (hot → cold),
+   - re-mask the least-confident `1 - t/steps` fraction — sculpting text from noise.
+
+3. **Rendering**. Progress bar + per-token confidence heatmap (green/yellow/red) and detokenized text.
+
+Deterministic with `--seed` — candidate ordering is sorted so results reproduce **across processes** (`PYTHONHASHSEED`-independent).
+
+## Examples
+
+```bash
+# reproducible atom answer
+python MLLM-5.1.py --seed 42 generate "what is an atom" --steps 15
+
+# watch it denoise
+python MLLM-5.1.py --seed 7 generate "the cat" --steps 12 --show-steps
+
+# custom corpus
+python MLLM-5.1.py --corpus ./my.txt --seed 1 generate "hello"
+
+# effort trade-off
+python MLLM-5.1.py generate "explain diffusion" --steps 10
+python MLLM-5.1.py generate "explain diffusion" --steps 40  # slower, sharper
+```
+
+## Project layout
+
+```
+MLLM-5.1.py        ← self-contained model (just run it)
+mllm51/            ← installable package (re-exports same logic)
+  topology.py        n-gram topology
+  engine.py          diffusion engine (sorted candidates → deterministic)
+  cli.py             CLI (generate / chat)
+  terminal.py        ANSI colors with NO_COLOR/tty detection
+data/corpus.txt    ← source for the embedded corpus (also inside MLLM-5.1.py)
+tests/             ← pytest suite (29 tests)
+pyproject.toml     ← pip metadata
+```
 
 ## Development
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -e . pytest
-pytest
+pytest -v
 ```
 
 ## Roadmap
 
 - [x] Effort control (`--steps`)
-- [ ] Playground with MLLM-5.1 (coming soon)
-- [ ] Studio (sometime later)
+- [x] Single-file self-contained runner
+- [x] Cross-process deterministic sampling
+- [ ] Playground
+- [ ] Studio
 
-Planned models:
+Planned models: Tasmania 1072P · Meridian 200P · Fjord 50P · Mesa 10P  
+Current: **MLLM-5.1 Preview-36P (rebuilt v5.1.1)** — the preview model.
 
-- MLLM-5.1 Tasmania 1072P
-- MLLM-5.1 Meridian 200P
-- MLLM-5.1 Fjord 50P
-- MLLM-5.1 Mesa 10P
-
-Current models:
-
-- MLLM-5.1 Preview-36P (preview of the model)
+---
+*Core principles preserved: bidirectional context, iterative denoising, confidence-guided remasking, sculpt-from-noise.*
